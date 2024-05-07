@@ -1,0 +1,57 @@
+
+Postgres =>
+docker run --name postgres1 -p 5432:5432 -e POSTGRES_USER=username -e POSTGRES_PASSWORD=password -d postgres
+
+docker login => to login using shell
+docker images => show all docker images avilable
+docker inspect image image_Id => show all details of the image
+docker run -p 8080:8080 iamgename:tagname => to run docker image on specific port and map it to our system port (but by this approch we cant run multiple instances in cmd at a time )
+docker run -d -p 8080:8080 iamgename:tagname => this will run docker image in dettached mode so we can run multiple instances with same cmd
+docker container pause conatinerId => pause container
+docker container unpause containerId=> unpause container
+docker container stop containerId => stop container
+docker conatainer kill containerId => kill container
+docker container restart containerId => to restart container
+docker container inspect containerId => to inspect container
+docker satrt conatinerId => this will start image instance created priviously and then stoped 
+docker ps => to list down all instances 
+docker stop instance-name => to stop instance
+docker exec -it instance-name bash => to go inside instance
+docker image rm image_id => to remove docker image , we can remove multiple images at a time by sepreating them with coma
+docker build . -t userid/imagename:tagname => to build image
+
+-----------------------------------------------------------------------
+docker container logs containerId => to fetch logs  
+docker container logs -f containerId => to follow log output
+docker rm conatinerId => to remove conatiner
+docker container purne => to remove all stoped conainers
+docker image push container_registry/username:tag = push to remote repo
+docker image pull container_registry/username:tag = pull from remote repo
+docker image purn => remover all unused images
+docker container stats => all container stats
+docker system purn => remover stoped container, dangling images, unused networks, volumes and cache
+docker rmi imageId => remove image 
+docker login -u username => to login in docker hub 
+docker logout => logout from docker hub
+docker history imageName => see all intermediate command executed while building image
+docker exec -it containerID sh => to open shell inside running container and execute commands
+docker compose up => to up docker compose
+docker compose down => to down and delete container open by using compose
+-------------------------------------------
+8080(Port in system):8080(port in docker)
+we can give it as
+8080:8080
+8081:8080
+8082:8080
+docker has isolated enviroment for each container so we can run multiple instance on same port 
+----------------------------------------------------------------------
+
+its not good practice to store images localy so we are pusshing it to docker hub by some commands
+
+docker image push docker.io/username/imagename:tagname
+eg. docker image push docker.io/akashaher/accounts:s4
+
+--------------------------------------------------------------------------------------------
+to pull images from repo to local
+docker pull usernave/imagename:tagname
+eg. docker pull akashaher/cards:s4

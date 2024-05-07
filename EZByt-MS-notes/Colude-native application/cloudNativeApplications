@@ -1,0 +1,52 @@
+Cloud native tech empower orgnizations to build and run scalable applications in modern, dynamic enviroments such as cloudes. 
+Containers, services meshes, microservices and declarative apis examplifly this approche.
+this technology enable loosely copled systems that are reslience, managable and observable.
+combine with robust automation they allow devlopers to make high imapct changes frequently with minimum distruction to privious code.
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+Important Characteristics of cloud native application
+1) Microservices => alows to build applications parrallay ,loosed coupled with diffresnt technologis 
+2) Containers => packaging and deploying applications using containers like docker. it provide lightweight and consistant enviroment for running applications, making them highly portable acrose diffrent cloud platforms 
+3) Scalablility and elasticity => easy to scale horizontally to handle traffic easy to do this using kubernetes
+4) DevOps Practices => follows devops practices, great for integration, continuous delivery and automated deployement pipelines
+5) Resilience and fault tolerance => Design to be resilence in the face of failuer, using techniques such as distubuted archtechture, load balancing, and automated failuer recovery to ensure high avilability and fauld tolerance
+6) cloud native services => services such as databases, messeging queues, caching system and identity services. this allow devlopers to focus more on application logics and less on managing infrastrucutr components
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+Diff between cloud nativ and traditional app
+1) cloude native app have predicted behaviour 
+2) cloude native apps not os depended
+3) cloude native apps are rightly sized and indipendant from each other
+4) cloude nativ support contineus delivery with help of devops principles and automation
+5) Clode native support rapid revovery and automated scalability by using kubernetes
+
+------------------------------------------------------------------------------------------------------------------------------------
+
+Principles of building of cloude native applications 
+
+1) Cloude platform deployement
+2) scalability as a core atribute
+3) system portability 
+4) Enabliling cpontineus deployement and agility
+
+----------------------------------------------------------------------------------
+
+15- Factor methodology 
+1) one codebase, one application 
+2) Api first 
+3) Dependancy management
+4) Design, build, release, run
+5) configuration, credentials and code
+6) logs
+7) Disposibility
+8) Backing services
+9) Enviroment parity
+10) Administative process
+11) Port Binding
+12) Stateless Process13) Concurrency
+14) Talemetry => monitoring instances
+15) Authentication and authorization
+
+

@@ -1,0 +1,184 @@
+When microsevice connect to each other we create microsevice network 
+it is single entry point through we can acess all parts of microsevice .
+we create single entry point to acess security , audit and logging like fetures at single place
+this point is called as api Gateway.
+
+whateever request we make from external client this will pass through this single entry point for validating reason
+
+-------------------------------------------------------------------------------------------
+
+In order to send the response to external request our internal services must connect with each other 
+This comunication called as internal comunication,
+To manage this internal comunication we use service resgistry and discovery.
+
+
+======================================Service Discovery and Registration=======================================
+
+1) how microsevice locate other microsevice inside network ?
+2) how a new service instance enters into the network ?
+3) how loadbalancing happen in microsevice instance ?
+
+To overcome all the above chalanges we have concepts of
+1) service discovery
+2) service registration
+3) Load balancing
+
+---------------------------------------------------------------------------------------------
+Why Not traditional load balancer for microsevice ?
+	How service comunicationhappens in traditionalapps =>
+		inside netword when service wants to comunicate with other service, it must be given the nessessory information to locate it , such as IP address or dns name , lets examine the senario of two services , accounts and loans . if there was only single instance of loans microsevice,
+			accounts MS => loans MS 
+			when accounts calling loans , accounts ms need ip or dns of loans ms 
+			
+	when we try to deploye multiple instances of multiple microsevice then its very dificlt to track the ips and dns of each instance.
+	Also, when if instance have any problem we remove it and up new instance , 
+	also, we have to balance load around instances.
+	Traditional load balancer cost is high at server side.
+	To overcome all this problems we use service discovery and registration 
+	
+	
+-----------------------------------------------------------------------------------------------
+How to overcome above problem in cloud nativ applications?
+Service discovery => it is perfect solution. it invikes tracking and storing information about all running services instances in a service resgistry
+Whenever new instance is created , it should be registerd in the registry , and when it is terminated it should be removed automatically
+
+the registry acknowledges the multiple instances of the same application can active at same time . when application needs to communicate with a breaking service, it performs a lookup in the registry to determine the ip address to connect to. if multiple instances are avilable a load-balancer statergy is employed to evenly disribute the workload among them 
+
+client-side service discovery and server-side service discovery are diffrent approches that address the service discovery problem in diffrent context.
+
+Microservices service discovery and registry is a way for applications and microsevice to locate each other on a network this includes,
+
+1) A central server (or servers) that maingtain a global view of addresses
+2) Microservices that connected to the central server to register their address when they start and ready
+3) Microservices needs to send thier heartbeats at regular interval to central server about their health
+4) Microservices that connected to cental server to deregister their address when they are aboout to shutdown
+
+-----------------------------------------------------------------------------------------------------
+
+Client side service discovery and load balancing
+	in this aproch applications are responcible to connect service registry during start and deregister at shutdoun 
+	if multiple instances avilable of same application then registry return it as list of ip adresses
+	
+	from that list of ips its depend on client to connect to ip thats why its called as client side service registry
+	we can write alogorithem to connect to whichever server we want that is advantages of this
+	we can follow multiple stratergies like, round-robin , weighted round-robin, least connection or even custom alogorithem
+	
+	drawback of this aproch is discovery assign more responsibility to devloper, aslo we we have to run one more service ie. service registry
+	
+	to overcome this we use server-side service registry using kubernetes
+	
+
+--------------------------------------------------------------------------------------------------------
+
+spring cloud support for client-side service discovery
+
+1) spring-cloud netflix'c eureka => service discovery agent
+2) spring-cloud load balancer => for client side load balancing
+3) netflix feign client => 	to lok up for services between microsevices
+
+-----------------------------------------------------------------------------------------------------------
+
+Create service discovery agent
+	add this dependencys
+	1) spring-cloud-starter-netflix-eureka-server	=> for service discovery
+	2) spring-cloud-starter-config					=> for centralize configurations
+	3) spring-boot-starter-actuator					=> for monitoring 
+	
+	then ,
+	1) mark main application with => @EnableEurekaServer
+	2) add this properties 
+	
+
+spring:
+  application:
+    name: "eurekaserver"
+  config:
+    import: "optional:configserver:http://localhost:8071/"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  health:
+    readinessstate:
+      enabled: true
+    livenessstate:
+      enabled: true
+  endpoint:
+    health:
+      probes:
+        enabled: true        
+
+server:
+  port: 8070
+
+eureka:
+  instance:
+    hostname: localhost				// what hostname eureka should consider
+  client:
+    fetchRegistry: false			// dont fetch registry details of other ms because we never call other service from eureka
+    registerWithEureka: false		// dont register with youerself and dont fech youer details
+    serviceUrl:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/	
+	
+
+	
+--------------------------------------------------------------------------------------------------
+How To Connect to eureka agent
+
+To do this add this dependency
+	1) spring-cloud-starter-netflix-eureka-client	=> work as eureka client
+	
+	then add this properties in client application,
+	
+eureka:
+  instance:
+    preferIpAddress: true		// connect with ip of host 
+  client:
+    fetchRegistry: true			// fetch registry details 
+    registerWithEureka: true	// register with eureka server
+    serviceUrl:
+      defaultZone: http://localhost:8070/eureka/   // server url
+
+info:													// this info visible in dashbord of eureka 
+  app:												// info endpoint not enables we need to enable it
+    name: "accounts"
+    description: "EzBank Accounts application"
+    version: "1.0.0"	  
+
+management:
+  info:							// to enable information
+    env:
+      enabled: true
+endpoint:						// to view shutdoun
+  shutdown:
+    enabled: true		
+	
+	
+-----------------------------------------------------------------------------------------------------[
+url => http://localhost:8070
+url for more info => http://localhost:8070/eureka/apps
+
+
+-----------------------------------------------------------------------------------------------------
+DeRegistration from eureka server
+
+url => http://loccalhost:8080/actuator/shutdown
+
+-----------------------------------------------------------------------------------------------------
+Heartbeat's of application
+
+go and shutdown eureka server we get exceptions in client applications trynig to connect eureka 
+we get exception => was unable to send heartbeat!
+
+==========================================================================================================================
+
+Why We see this waring =>
+EMERGENCY! EUREKA MAY BE INCORRECTLY CLAIMING INSTANCES ARE UP WHEN THEY'RE NOT. RENEWALS ARE LESSER THAN THRESHOLD AND HENCE THE INSTANCES ARE NOT BEING EXPIRED JUST TO BE SAFE.
+
+=> eureka recive hearbeat in 30 evry 30 sec 
+=> eureka delete the service if its not giving heartbeat
+=> to avoid deleting the service in any glitch, like server delay, network problem
+=> so if eureka not recive hearbeat then its show this message insted of directly deleting the service
+=> eureka telling us that some services may not respond at the time but i will mainten it in case they are back online

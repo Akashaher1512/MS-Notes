@@ -1,0 +1,774 @@
+
+Configuration Management in microservces
+
+We have some chalanges to implement this like,
+
+I] sheperation of configuration / properties 
+
+II] Inject configuration / properties
+
+III] Maintain configuration / properties
+---------------------------------------------------------------
+There are multiple solutions avilable in springboot echosystem to handle this chalange,
+Below are the few solutions .
+
+1) configuring spring boot with properties and profiles
+2) applying external configuration with spring boot
+3) Implementing a configuration server with spring cloud config server
+--------------------------------------------------------
+
+In traditional aaplication all the configuration bunddled together with their source code and varius configuration files that connectedd the enviorment.
+
+----------------------------------------------------------------------
+How Configuration works in springboot ?
+By using properties file or yamal file or enviorment variables and commandline arguments spring 
+This aproch is not best for microservices because we have to change properties for diffrent enviorments
+--------------------------------------------------------
+By using @Value("${property.name}") used to read values
+--------------------------------------------------------
+By using Enviroment interface we can get the properties on which application is up
+Sensitive information like passwords and userid we cant define it inside application.yml for security reasons so we define it in at enviorment variable so no one have access to it except authorised person 
+	
+@Autowired
+public Enviroment enviroment;
+
+public void getProperty(){
+	String propertyValue = enviorment.getProperty("property.name"); // in getProperty("") pass the env variable name
+}
+
+eg..
+
+	import org.springframework.core.env.Environment;
+
+	@Autowired
+    private Environment environment;
+
+	@GetMapping("/java-version")
+    public ResponseEntity<String> getJavaVersion(){
+        return ResponseEntity.status(HttpStatus.OK).body(environment.getProperty("JAVA_HOME"));
+    }
+	
+
+-----------------------------------------------------
+By using @ConfigurationProperties we can get property values 
+its also recommeded because it avoid hard coding the property keys
+we can read multiple properties at a time using this in pojo class
+
+@ConfigurationProperties("prefix")
+public class MyConfig{
+	private String property;
+	private Stirng name;
+	.
+	.
+	.
+	// getters and setters
+
+}
+
+// mention  @EnableConfigurationProperties(value = {classname.class}) on top of main class
+
+// inject bean by using autowired in controller to use 
+	@Autowired 
+	private MyConfig myConfig;
+
+eg. 
+accounts:
+  message: "Welcome to EZBank accounts related local apis"
+  contactDetails:
+    name: "Akash"
+    email: "akashaher@neutrinotechlabs.com"
+  onCallSupport:
+    -(555) 555-1234
+    -(555) 555-1345
+	
+
+	@ConfigurationProperties(prefix = "accounts")
+	public record AccountsContactInfoDto(String message, Map<String,String> contactDetails, List<String> onCallSupport) {
+		// record as fixed data storage it has only getter method and its feilds are final and immutable meaning once created, their state cannot be changed.
+	}
+
+
+	@EnableConfigurationProperties(value = {AccountsContactInfoDto.class}) 	mention this on top of main class 
+
+
+	// in controller to use it
+	@Autowired
+    private AccountsContactInfoDto accountsContactInfoDto;
+
+	@GetMapping("/contact-info")
+    public ResponseEntity<AccountsContactInfoDto> getContactInfo(){
+        return ResponseEntity.status(HttpStatus.OK).body(accountsContactInfoDto);
+    }
+
+
+	
+
+in this case property with the prefix will be mapped to feilds of the MyConfig class
+
+----------------------------------------------------------------------------------------------------------
+
+All This approches suitable for Single enviorment , But for multiple enviorment this approche is not suitable so we have to use somthing more advance for diffrent enviorment like dev, qa, prod etc
+For this we use spring boot profiles for diffrent profile,
+like,
+	along with application.properties we can create multiple profills
+	application_prod.properties => fro production also mention ( spring.config.active.on-profile="qa") 
+	application_qa.properties => foe testing also mention ( spring.config.active.on-profile="prod")
+	
+	by defauld application.properties file is active,
+	but we can change override properties of it by any other profile by selecting it 
+	mention ,
+		spring.profiles.active=prod => inside application.properties file and all ther properties explisitly metnioned int prod will ovverrrite in application.properties 
+	
+	also mention ,
+		spring.config.import[0]="application_qa.yml"
+		spring.config.import[1]="application_prod.yml"
+		
+	in applucation.properties to recognise files 	
+	
+	
+------------------------------------------------------------------------------------------------------
+*** External Ways to Change profiles 
+This is nice approche but after building image of our project if we have to externaly change profileacordingly then we have some ways for dooing this externally,
+lets explore external ways of changing profiles at run time
+
+1) with help of comandline argument 
+		at a time of running jar we can give commandline argumnent with -- and  specific key value so it will utilize for aplication run 
+		eg. java -jar account-service-0.0.1-SNAPSHOT.jar --build.version="1.1"
+		
+		ex. we can give configuration by using modify run configuration when working with ide in program argument section
+			--spring.profiles.active=prod --build.version=1.1
+		
+		or we can give it with cmd during runing jar
+			java -jar account-service-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod --build.version=1.1
+		----------------------------------------------------------------------------------------------------
+2) jvm system properties		
+		for this we have -D and specific key value so it will utilize for aplication run
+		eg. java -Dbuild.version="1.2" -jar account-service-0.0.1-SNAPSHOT.jar 
+		
+		ex. we can give run configurationby using modiy run configuration in vm section in ide
+			-Dspring.profiles.active=prod -Dbuild.version=1.1
+			
+		or we can give it in cmd like this 
+			java -Dspring.profiles.active=prod -Dbuild.version=1.1 -jar account-service-0.0.1-SNAPSHOT.jar
+		-------------------------------------------------------------------------------------------------------
+3) 	Environment Variables
+		This is  most widely used method for externalize configurations, Most programing language supports it
+		We can aslo access this enviorment variables inside java code by using System.getenv() method
+		
+		to use this
+		1) convert all proverties key name to uppercase value during providation time
+		2) replace all dots (.) to underscore (_) 	eg. build.version => BUILD_VERSION . this featere is known as relax binding
+		
+		For windows
+		eg. env:BUILD_VERSION="1.3"; java -jar account-service-0.0.1-SNAPSHOT.jar
+		
+		for linux based os
+		eg. BUILD_VERSION="1.3" java -jar account-service-0.0.1-SNAPSHOT.jar
+		
+		ex. we can give run configurationby using modiy run configuration in Enviroment Variables section in ide
+			SPRING_Profiles_active=prod;BUILD_VERSION=1.9;
+	
+		or we can give it in cmd like this
+			env:SPRING_Profiles_active=prod;env:BUILD_VERSION=1.9; java -jar account-service-0.0.1-SNAPSHOT.jar
+			
+			
+---------------------------------------------------------------------------------------------------------------------
+
+Drawbacks of externalize configuration using springboot only
+
+1) manually executing commands for changing configuration may cause errors during deployement
+2)we need someone to setup this arguments but, we want to atomize this processes so it will cause trouble for complitly automating deployement processes
+3) in big orgnization we have 100's of microservces and 1000's of properties to configure its not possible to do  it manually
+4) giving that configuration data to someone to configure things is not good practice it will cause security issue
+5) env variables lacks granual access, like who has accesss to prod server 
+6) your server admin can see youer env variables enterd 
+7) when to deploye multiple instances of single service it even cause more 	problems 
+8) when we give password through cli then its not encrypted passwords its plain texts so it caus more problems
+9) with all above aproches we cant change property value at runtime we are forcefull to take restart to change any value at runtime
+
+To solve all this problem we are going to use spring cloud config server reffer that notes now 
+
+
+==================================================================================================================================================
+==================================================================================================================================================
+**************************************************Spring Cloud Config Server*********************************************************************
+
+A Centralize configuration server with spring cloud config can overcome all the drwabacks that we discusssed above.
+spring cloud config provides server and client side support for external configuration in distributed system.
+
+it revolves around two core elements 
+1. A data store designed to handle configuration data, ensure durability, version management and access controll.
+2. A server that oversses the configuration data within the data store, facilationg its managementand distribution to multiple applications.
+
+---------------------------To Use this create new project configserver-------------
+1. add dependancy spring-cloud-config-server
+2. mantion @EnableConfigServer on main class
+3. give port and name to application
+
+server:
+  port: 8071
+
+spring:
+  application:
+    name: "configserver"
+	
+------------------------------------------------------------------------------------------------------------------------------------------
+
+Now we need to move config server to centralize place to use it
+	1. in classpath location of server itself
+	2. file system
+	3. github repo
+	4. database
+	5. cloud 
+	we are trynig this aprroches for config server
+	
+--------------------------------------------------------------------------------------------------------------------
+	1. For In classpath loaction of server 
+	
+	i) in resource create folder config 
+	ii) past all config files of account inside it (But thid will create trouble because we have other files of same name from other ms )
+	iii) so rename that application.yml to accounts.yml, loans.yml, cards.yml accordingly 
+	iv) also application_prod.yml to accounts-prod.yml, loans-prod.yml (use dash (-) to sheprate sub properties files
+	v) remover properties that we dont want to override like port, name, database related , config import , profile active. activate on etc etc
+	
+	---------------------------
+	we need to add some more properties
+	
+server:
+  port: 8071
+
+spring:
+  application:
+    name: "configserver"
+
+  profiles:
+    active: native
+
+  cloud:
+    config:
+      server:
+        native:
+          search-location: "classpath:/config"	// give class path where propertiesfile stored 
+		  
+	-------------------------------------------------	  
+	To Check ouer properties are loaded or not it provide us endpoints for given properties files
+	like, localhost:8071/account/prod	, loalhost:/8071/loans etc , localhost:8071/accounts/default , localhost:8071/loans/default etc ... 
+	
+	
+--------------------------------------------------------------------------------------------------------------------
+	2. Reading properties from file system
+	i) advantages of this is server admin can restric that who should open that path and who should not access to it , that qay ther properties are more secure that the classpath aproch because in that approch anyone who has access to config server can view the properties
+	
+	ii) To use this create all the files inside any secure location in system or server whichever you are using
+	iii) i have created all this files in =>  C:\Users\NTS_Akashaher\EZBankConfig this location
+	iv) activer profile should nativ its for loacal aproches => spring.profile.active = native
+	v) change the serch-location path acording to your location in following format => "file:///fileLocation"
+	vi) "file:///" after file give three forword slash and then give path 
+		eg. => search-locations: "file:///C:/Users/NTS_Akashaher/EZBankConfig"
+	
+	vii) config file look like this then 
+
+server:
+  port: 8071
+
+spring:
+  application:
+    name: "configserver"
+
+  profiles:
+    active: native
+
+  cloud:
+    config:
+      server:
+        native:
+          search-locations: "file:///C:/Users/NTS_Akashaher/EZBankConfig"
+	
+	
+----------------------------------------------------------------------------------------------------------------------------
+	3. Reading Configuration From github repo
+	i) Advantages Of this is We can properly secure our github repo so no one can access it . this is most recommeded aproch.
+	ii) it aslo support versioning and auditing , like after two years we want to see which property we used 2 years ago it is possible with this approch .
+	iii) create a repo in github and move this config files in it.
+	iv) in config server properties do this changes
+		i) activer profile should git its for github aproches => spring.profile.active = git
+		ii) now we are not using nativ aproch so remove native search location use git now => spring.cloud.config.server.git
+		..... This is for Public repo .............
+		git:
+          uri: "https://github.com/Akashaher1512/EZBank-Config"	// uri of github accont
+          default-label: "main" // which is main branch 
+          timeout: 5	// wait for only 5 sec to connect to repo if not connected then throw exception		
+          clone-on-start: true	// clone the files on the start of server, if false it clone when you start hitting request
+          force-pull: true	// forcfully pull the files and ovverrid local files incase they are present in local temp repo 
+		
+		.......for private repo we need to provide username and password...........
+		git:
+          uri: "https://github.com/Akashaher1512/EZBank-Config"	// uri of github accont
+          default-label: "main" // which is main branch 
+          timeout: 5	// wait for only 5 sec to connect to repo if not connected then throw exception		
+          clone-on-start: true	// clone the files on the start of server, if false it clone when you start hitting request
+          force-pull: true	// forcfully pull the files and ovverrid local files incase they are present in local temp repo 
+		  username: 
+		  password:
+		  
+		 .................if not conmifrtable to provide username pass we can aslo use SSH authentication .ie storing credentials in default directorys (~/.ssh) in encrypted format 
+		 
+		 --------------------------to avoid expose of password we can do like this -------------
+		 spring:
+		  cloud:
+			config:
+			  server:
+				git:
+				  uri: ${GIT_REPO_URL}   # Use environment variable for Git repository URL
+				  username: ${GIT_USERNAME}  # Use environment variable for Git username
+				  password: ${GIT_PASSWORD}  # Use environment variable for Git password
+				  search-paths: ${SEARCH_PATHS:}  # Use environment variable for search paths (optional)
+				  default-label: ${DEFAULT_LABEL:}  # Use environment variable for default label (optional)
+
+	
+----------------------------------------------------------------------------------------------------------------------------------------
+Steps to use config server for account, loans, cards ms
+
+1. first you can now dlt other propertis file like qa and prod
+2. also we can delete par allredy avilable in config servers files from accounts.yml 
+3. give name to application =>  spring.application.name="accounts"	=> this name should match to name given to proprty file presents in config server
+4. aslo give bydefault which profile should activated =>  spring.profiles.active = "prod" 
+5. add dependancy of config client => spring-cloud-starter-config in pom.xml 
+6. do therequird changes in pom.xml like add spring cloud version and depenancy management for cloud
+7. add one property to give endpoint information of config server => spring.config.import= "optional:configserver:http://localhost:8071/"
+	-- optional: indicates if there is no config server finds use local properties and run the application 
+	eg.
+server:
+  port: 8080
+
+spring:
+  application:
+    name: "accounts"
+  profiles:
+    active: "prod"
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driverClassName: org.h2.Driver
+    username: sa
+    password: ''
+  h2:
+    console:
+      enabled: true
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  config:
+    import: "optional:configserver:http://localhost:8071/"
+
+----------------------------------------------------------------------------------------------------------------------------------------
+
+=================================Encryption And Decryption of properties inside config server=============================
+1) it is recommeded to encrypt sensitive information like usernames and passwords 
+2)Spring cloud config servery helps us to do this 
+	i) first we declair a complex key for encryption and decryption insdie properties file ie. => encrypt.key="45D81EC1EF61DF9AD8D3E5BB397F9" => its completly random key , key should hard to guess
+	ii) now to encrypt any value go to postman and select post request => localhost:8071/encrypt 
+		and pass any value in raw => text form to encypt it based on your secret key .
+	iii) like i dont want to show email directly in account MS so i am encrypting it and then adding it in git repo email feild	
+	iv ) akashaher@neutrinotechlabs.com => 49a06566a17b636b07db0066b211ac058bcf85857d5c05e57b94545ff3af5625b98e029c25a8a5c7dd9d17e08be9ba9f // encrypted based on key 
+	v) but we have chalange that how config server knows which value is encrypted and which not, to help spring cloud we add prefix to the encrypted value..=> "{cypher}encryptedValue" like this
+	eg. email: "{cipher}49a06566a17b636b07db0066b211ac058bcf85857d5c05e57b94545ff3af5625b98e029c25a8a5c7dd9d17e08be9ba9f"
+	vi)now even if someone acces to my github repo and see the value they see the encrypted value unless they have secret key mention inside the config server
+	
+	*** we now configure secret key direclty but in real life application its configure with help of "enviorments variable","cli arguments " or any other aproch
+	
+	
+2) to decrypt value config server also support this	
+	i) now to encrypt value go to postman and select post request => localhost:8071/decrypt 
+		and pass encrypted value in raw => text form to decrypt it based on your secret key .
+	
+		************In production server config sever deployes behind fierwall so no one can have access to this urls of config server to use its encryption decryption its only for authorised persions *********************
+		*************In addition we can secure it using spring securioty for more authentication and more security********************************
+		
+
+===================================================================================================================================
+
+=======================Refresh Configurations at runtime=====================================================================
+	We have this options to refresh configuration at runtime 
+		A) Using refresh actuator path
+		B) Using spring cloud bus
+		C) Using spring cloud bus and spring cloud config motitor
+	--------------------------------------------------
+	A) Refresh configuration at runtime using refresh actuator path
+	
+		1) we can refresh configration at runtime using actuator end point
+		2) we cant use *Record* as @ConfigurationProperties to refresh properties as run time as, records field are final 
+		3) to refreh configuration use class as @ConfigurationProperties to refresh it at runtime 
+		4) we need to add getter and setter methods to this class
+		5) do this changes for AccountsContactInfoDto, LoansContactInfoDto, CardsContactInfoDto
+		6) Add this property to expose all management related endpoints
+			==> management.endpoints.web.exposure.include: "*"
+		
+		7) now go and change the configuration at runtime and you will see that our config server always fetch latest properties from github
+		8) to refresh it inside our runtime instace we can use actuator's refresh path 
+				=>http://localhost:8080/actuator/refresh 
+		9) we need to invoke this by using postman because its post method 
+		10) now check again our properties are refreshed at runtime 
+		
+	----------------------------------------------------------	
+	
+	B) Refresh configuration at runtime using spring cloud bus
+		By using actuator refresh path we have so problem that we are dealing with 100's of microservces and its thousands of instances 
+		manually refreshing the changes is not a good idea 
+		To overcome this we have spring cloud bus project , it will interlink all our microservces instances with lightweigh message broker like rabbitMq or Kafka
+		By using this we have to invoke refresh url once and it will reflect on all the instances of that service 
+		To use this approch first we have to run rabiitMQ inside our system
+		1) go to https://www.rabbitmq.com/ => click get started => downloading and install => copy docker command  => go to terminal and run this docker command 
+		(# latest RabbitMQ 3.13
+			docker run -it --rm --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3.13-management)
+		
+		==> behind it install two components 
+			1) management component => responsible to manage rabiitMQ and provide ui to use it
+			2) core component => responsible to handle message quew related functionality
+			
+		2) Now we need to add dependecy of [spring-cloud-bud] and [rabiitMQ] to evry component including config server 
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-starter-bus-amqp</artifactId>
+			</dependency>
+		
+		3) this depenancy contain both spring cloud and rabiitMQ support
+		
+		now open path fpr the cloud bus in actuator
+			==> management.endpoints.web.exposure.include: "*"
+			
+		4) now we need to establish link between microservces and rabbitMq by providing connection detaisls of rabiitMQ	by providing this properties
+			# RabbitMQ Configuration
+				spring.rabbitmq.host=localhost
+				spring.rabbitmq.port=1572
+				spring.rabbitmq.username=guest	=> default username
+				spring.rabbitmq.password=guest	=> defaut password
+				
+				**yml **
+				spring:
+				  rabbitmq:
+					host: "localhost"
+					port: "1572"
+					username: "guest"
+					password: "guest"	
+		
+		5) Ny refreshing any instance bus-refresh url we can refresh all the changes in all the instaces of all the microservices
+				==> http://localhost:port/actuator/busrefresh
+	
+-------------------------------------------------------------------------------------------------------	
+	C) Refresh configration at runtime Using spring cloud bus and spring cloud config motitor
+		using bus we need to invoke refresh once but it is still extra work involve , we can done it automatically by using github webhook 
+		1) to use this all the steps from above section is same in addition we need to add 
+		[spring-cloud-config-monitor] depenancy to only configserver application 
+		2) we need to add this in configure server properties
+			==> management.endpoints.web.exposure.include: "*"
+		3) also mention RabbitMQ connection details
+				# RabbitMQ Configuration
+				spring.rabbitmq.host=localhost
+				spring.rabbitmq.port=1572
+				spring.rabbitmq.username=guest	=> default username
+				spring.rabbitmq.password=guest	=> defaut password
+				
+				**yml **
+				spring:
+				  rabbitmq:
+					host: "localhost"
+					port: "1572"
+					username: "guest"
+					password: "guest"	
+					
+		4) Now go to github repo and create webHook
+			config repo => settings => webhooks => add webhook
+					=> provide payload url 
+						=> it dose not accesss localhost so give proper url of monitor [at production devops team take care of it ] for checking on dev stage we can do it using intermediate like hookdeck website (https://console.hookdeck.com/)
+						go to this website and click on add-destination => then follow given  steps
+							** you need scoop installed in system or install it using terminal by using this commands
+								**=> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+								**=> Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+								
+						1)=> install hookdeck in local 
+							=> scoop bucket add hookdeck https://github.com/hookdeck/scoop-hookdeck-cli.git
+							=> scoop install hookdeck
+						2)=> Login and start the CLI with those commands
+							=> hookdeck login --cli-key 59pvj5smxy2yfffgrh5ez5eclswlnonmbj62e4wupl0tsd467b
+							=> hookdeck listen [port of config server] Source
+							it will ask =>  What path should the webhooks be forwarded to (ie: /webhooks)? ==> /monitor	
+											[we are mappiing (localhiost:8071/monitor)]
+							then it will ask What's your connection label (ie: My API)? ==> localhost
+							now it create webhook url with domain name like this => 🔌 Webhook URL: https://hkdk.events/5xfph0cd0yc6mo
+								*** hookdeck logout => to logout from session
+						This url perfectly work for github repo webhook 
+						we need to setup webhook evry time when we logout
+			
+			github 	==> provide payload url => https://hkdk.events/5xfph0cd0yc6mo
+					==> content type => application/json
+					==> secret => provide if using it 
+					==> Which events would you like to trigger this webhook? ==> Just the push event. => when we push somethnig this event happen 
+					==> add webhook
+			
+			done => webhook for push event created now whenever we done chnages this event take place and our configuration refresh automatically
+			
+			under webhook => recent deliveries => we can see the webhook requests 
+			
+			webhook => whenever any chnages happen in my github repo webhook invoke the provided event url 
+			hookdeck => it is tool for devloper as we are using localhost github can not recognise our request url , hookdeck create dummy url with proper hostname to connect github webhook and our local configsurver's 'localhiost:8071/monitor' url 
+			
+			
+			
+			
+=============================================================================================================================================
+
+*******************Now we need to add all this changes to docker compose to start our application in one click*************
+	=>	We have three enviorments to support this we are going to create three docker compose files 
+		=> create directory => docker-compose
+			add directories => default , qa and prod 
+				=> add docker-compose.yml in each directory
+	
+	Add configserver and other ms in docker compose 
+	also we need to establish link between config server and other ms because when we run application on system its run on localhost but when we start it on docker it run on its isolated enviorment, we neet to mention that proper url to establish connection
+	
+	we mention like this,
+	
+	  accounts:
+		image: "akashaher/accounts:s6"
+		container_name: accounts-ms
+		ports:
+		  - "8080:8080"
+		deploy:
+		  resources:
+			limits:
+			  memory: 700m
+		networks:
+		  - ezbank
+		environment:
+		  SPRING_APPLICATION_NAME: "accounts"	=> application name mention in application.yml
+		  SPRING_CONFIG_IMPORT: "configserver:http://configserver:8071/"	=> to ovverrid spring.config.import in aaplication
+		  SPRING_PROFILE_ACTIVE: default	=> to set which profile is active, it could be prod / qa/ default acording to folder we created
+		  
+	**  this capital syntax is Environment Variables aproch to override variables we seen it earlyer
+		  SPRING_CONFIG_IMPORT: "configserver[always same]:http://{service name of config server mention inside docker file}:8071/"
+		  
+		  Now mention this for all services
+		  
+
+	=> Still we have problem that before starting other services config server must be started and in running stage for this, 
+		for this we need to mention the depenancy of configserver to other services
+		
+		With the help of Liveness and Readiness we are going to see our configserver are ready or not 
+	
+services:
+  configserver:
+    image: "akashaher/configserver:s6"
+    container_name: configserver-ms
+    ports:
+      - "8071:8071"
+    healthcheck:
+      test: "curl --fail --silent localhost:8071/actuator/health/readiness | grep up || exit 1"	=> check this if not up return fails
+      interval: 10s	=> after evry 10 second
+      timeout: 5s	=> try for 5 second befor fall 
+      retries: 10	=> try 10 times if not accessable
+      start_period: 10s	=> after run of compose after 10 seconds try executing url
+    deploy:
+      resources:
+        limits:
+          memory: 700m
+    networks:
+      - ezbank		
+		
+		
+			**** Now for other ms we have to mention following things 
+services:			
+	accounts:
+		image: "akashaher/accounts:s6"
+		container_name: accounts-ms
+		ports:
+		  - "8080:8080"
+		depends_on:					// this idicates our service depend on which components
+		  configserver:				// our service depends on this 
+			condition: service_healthy		// when service status of configserver is healthy then only docker start to run our this ms
+		deploy:
+		  resources:
+			limits:
+			  memory: 700m
+		networks:
+		  - ezbank
+		environment:
+		  SPRING_APPLICATION_NAME: "accounts"
+		  SPRING_CONFIG_IMPORT: "configserver:http://configserver:8071/"
+		  SPRING_PROFILE_ACTIVE: default		
+
+-----------------------------------along with all this the RabbitMQ is esential for ouer configserver as we uding it for autorefresh so we need to add it in docker compose file aslo -----------------------
+
+services:
+  rabbit:
+    image: rabbitmq:3.12-management
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: rabbitmq-diagnostics check_port_connectivity
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+	networks:
+		- ezbank
+
+
+		then mention to other the ms which are depend on this , i will mention it in configserver
+		    depends_on: 
+			  rabbit:
+				condition: service_healthy
+
+======================================Liveness and Raediness=====================
+
+	Liveness => a livness probs sends a signal that the container or application alive or dead. if container is alive then no action is requird 	because current tage is good , if container is dead then an attempt shold be made to heal the application by restricting it .
+	It  is responsibility of kubernetes or any other platform to monitor this
+	
+	Readiness => a Readiness probls used to know wheter the container or appp being probed is ready to start reciving network trafic. if your container enters a state where it is still alive but can not handling incoming network trafic then we want to redyness probs fails so that trafic will not be sent to a container which isent redy for it 
+	If someone prematuarly send network trafic to the container, it could cause the load balacer to return a 502 error to the client and terminate ther request, the client whould get a "connection refused" error message.
+	In simple words it shows "Is this container ready to recive network trafic or not".
+	
+	
+	** In springboot application actuator gathers the "Liveness" and "Readiness" information from the ApplicationAvilability interface and uses that information in dedicate helth indicators : LivenessStateHealthIndicator and ReadynessStateHealthIndicaor.
+	this indicators are shown on global health endpoint ("actuator/health).
+	They are also exposed as sheprate http probs by using health groups: "/actuator/health/liveness" and "/actuator/health/readiness"
+	
+	
+	To enable this we have to mention following properties in our application (we want it for configserver so we will mention it in it)
+	
+	management:
+	  endpoints:
+		web:
+		  exposure:
+			include: "*"
+	  health:
+		readinessstate:
+		  enabled: true		// enabled readiness status
+		livenessstate:
+		  enabled: true  	//enabled liveness status
+	  endpoint:
+	   health:
+		 probes:
+		   enabled: true	
+		   
+	Now we can check it by using 
+		=> http://localhost:8071/actuator/health
+		=> http://localhost:8071/actuator/health/liveness
+		=> http://localhost:8071/actuator/health/readiness
+		
+		
+		
+====================================Optimizing docker compose file=====================================================================		
+	we have some repetative content in docker compose file se we can put it in diffrent file and fetch it to docker compose file to use it 
+	
+	------------common-config-yml-----------
+
+services:
+  network-deploy-service: 							=> basically used of rabbitMq
+    networks:
+      - ezbank
+			
+  microservice-base-config:							=> basically used for configserver
+    extends:
+      service: network-deploy-service
+    deploy:
+      resources:
+        limits:
+          memory: 700m
+	environment:
+      SPRING_RABBITMQ_HOST: rabbit					=> to connect all services to rabbit mq
+
+  microservice-configserver-config:					=> basiccaly used for other ms like accounts, cards and loan
+    extends:
+      service: microservice-base-config
+    depends_on:
+      configserver:
+        condition: service_healthy
+    environment:
+	  SPRING_PROFILES_ACTIVE: default
+      SPRING_CONFIG_IMPORT: "configserver:http://configserver:8071/"
+	  
+	  
+	  
+	  ----------------------------Now we need to mention this in our docker-compose.yml------------------
+	  
+	  
+services:
+  rabbit:
+    image: rabbitmq:3.12-management
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: rabbitmq-diagnostics check_port_connectivity
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+  configserver:
+    image: "akashaher/configserver:s6"
+    container_name: configserver-ms
+    ports:
+      - "8071:8071"
+    depends_on:
+      rabbit:
+        condition: service_healthy
+    healthcheck:
+      test: "curl --fail --silent localhost:8071/actuator/health/readiness | grep UP || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    extends:
+      file: common-config.yml
+      service: microservice-base-config
+
+  accounts:
+    image: "akashaher/accounts:s6"
+    container_name: accounts-ms
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_APPLICATION_NAME: "accounts"
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+  loans:
+    image: "akashaher/loans:s6"
+    container_name: loans-ms
+    ports:
+      - "8090:8090"
+    environment:
+      SPRING_APPLICATION_NAME: "loans"
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config
+
+  cards:
+    image: "akashaher/cards:s6"
+    container_name: cards-ms
+    ports:
+      - "9000:9000"
+    environment:
+      SPRING_APPLICATION_NAME: "cards"
+    extends:
+      file: common-config.yml
+      service: microservice-configserver-config  
+networks:
+  ezbank:
+    driver: "bridge"  
+	
+	
+======================================we are ready with all ==========
+try to run all this things 
+1st we need to build image again 
+=> mvn compile jib:dockerBuild	

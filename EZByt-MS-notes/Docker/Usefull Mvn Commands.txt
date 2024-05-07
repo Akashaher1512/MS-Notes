@@ -1,0 +1,19 @@
+pwd => present working directory
+ls => list all files inside pwd
+clear => clear console
+-------------------------------------------------------------------------
+
+to build project jar you must be on directory where pom.xml file present
+
+mvn clean install => crate jar file of our project it will genrate jar file under target folder.
+
+mvn spring-boot:run => run the spring boot project (we have spring-boot-maven-plugin inside pom.xml) so it run directly using this command 
+
+ctrl + c => stop server running in console
+---------------------------------------------------------------
+
+java command to run project
+
+go till the target folder then execute tis command
+
+java -jar jarName.jar 

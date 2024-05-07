@@ -1,0 +1,140 @@
+
+Avoiding Temporal coupling whenever possible 
+=> Temporal coupling occures when a caller service expects an immidiate response from the callee service before continuing its processing. If the callee experienced any delay in responding, it negetivly impacting the overall response time of ther caller . this scenario occers in synchronous communication between services. how can we prevent tempral coupling and limits its effects ?
+
+=> in order to avoid temporal coupling we use asynchronous communication bewtween systems
+=> Syncohronous communication bewtween services is not always nessesory. in many real world scenarios, asynchronous communication can fullfill the requirments effectivly. so , how can we establish asynchronous communication between services
+
+=> when we want to show imidiate response to end user then we use synchronous communication
+	=> showing balance to user
+	
+
+Event Driven MS
+	=> An event , as an incident, signifies a significant occurance within a system, such as a state transition, multiple sources can generate events. when an event takes place , it is possible to alert the conncerned parties. 
+	=> eg in amazon , when we place order ther order service has to notify dilivery service deploye inside amazon network, it dose nothave to be synchronous comunication. when user done payment order service trigger event and it act like message to dilivery service, during this process order service dose not wait for confirmation from dilivery service. order service send successfull response to user without waiting for dilivery service
+	
+=> How can we go about constructing event driven services whith this charachteristikes ?
+	=> it build using event-driven-archtecture, producing and consuming event during async communication, event brokers, spring cloud function, spring cloud stream.
+	
+	
+	
+==================================================================================================================================
+
+Event Driven Models
+
+1) Publisher/subscriber model
+		=> this model revolves uround subscription. producer generates event that are disrtibuted to all subscribers for consumption. once an event is recived, it can not be replayed, which means new subscriberrs joining later will not have access to past events
+		=> implemented with RabbitMQ
+
+2) Event Streaming Model 
+		=> in this model, event are written to a log in a sequesntial manner. Producer publish events as they occure, and these events are stored in well-orderd fasion. Insted of subscrbing to events, consumers have the ability to read from any part if the event steam , one advantage of this model is that event can be replayed, allowing clients to join at any time and recive all past events
+		=> we can aslo dissables that replaying feature
+		=> Implemented with apacKafka
+
+
+===================================================================================================================================
+We are going to build thius using pub/sub model
+		=> Some one try to create new account 
+		=< end user recive the account created successfully imidiatly
+		=>In Account MS new account get created and a request to send communication will be published into event broker and response to end user will be initialized 
+		=> In Event Broker the event broker recivers the event details and push the same into a queue which the message service subscribed  
+		=> Messaging service recives the notification from event broker and read the details from the queue. the data will be processed and an email, sms will be send to the customer
+		
+		====> 
+		=> once message service procssed the comunication. it publish an event async to confirm the same
+		=> the event broker recives the event details and push the same into a queue which the  account service subscribed
+		=> accounts service recive notification from event broker and updtae the db columes accordingly about communication to customer
+		
+===================================================================================================================================	
+Intoduction to RabbitMQ
+
+	this follows AMPQ (Advance message queuing protocoll) and its ability to offer flexible asynchronous messaging, disributed deployement, and comherhensive monitoring. furthermore, recent versions of RabbitMQ have incorporated event streaming functionality into their feature set	
+	
+	Terminologys:
+	1) Producer => the entity responsible for sending message(also known as publisher)
+	2) Consumer => the entity tasked with reciving message (also known as subscriber)
+	3) Message Broker => the middleware that recives message from producer and direct them to the appropriate consumers.
+	
+	producer => send message to => message broker => send message to => consumer 
+	
+	
+	What happens inside message broker
+		
+		The messaging model op AMPQ operates on principle of exchange and queues, as depicted in the following illustation. producer transmit message to an exchange . based on specific routing rule, RabbitMQ determines the queues that should recive copy of the message, consumer , in turn read message from queue
+		
+		producer=> send message to [exchange] present inside [message broker] => exchange push message to [queue1] [queue2] [..] acoeding to subscriber subscribed to queue => queue push message to [consumer] => then message from queue deleted 
+		
+		
+===================================================================================================================================	
+We are going to build messaging service using spring cloud function
+
+	=> spring cloud function enables us to write buissness logic using functions that adhere to the standard interfaces introduced in java8, namely Supplier, Sunction and Consumer
+
+	=> Supplier => produce output without input
+	=> Function => accept input and generate output
+	=> Consumer => consumes input but dose not generate output
+	
+	Devloping functionality using this is very easy and by default the logic is exposed to rest api directly
+	
+	Spring cloud function features
+		1) choice of programing style => reactive, imperative or hybrid
+		2) POJO functions (ie if something fits the @FunctionalInterface semantics will treat it as function)
+		3) Function composition which includes composing imperative functions with reactive
+		4) REST support to expose functions as http endpoints 
+		5) Straming data(via appache kafka , solace, RabbitMQ etc) to/from functions via spring cloud stream framework
+		6) pakageing functions for deployements, specific to the target platform, (eg. aws lambda and other serverless providers)
+		
+		
+		Promote the implementation of business logic via functions.
+		Decouple the development lifecycle of business logic from any specific runtime target so that the same code can run as a web endpoint, a stream processor, or a task.
+		Support a uniform programming model across serverless providers, as well as the ability to run standalone (locally or in a PaaS).
+		Enable Spring Boot features (auto-configuration, dependency injection, metrics) on serverless providers.
+===================================================================================================================================	
+
+Spring Cloud stream 
+	it is framework design to create scalable event drvien and sreaming application
+	It has logic to integrate with message broker
+	it act like interface so we can connect any message broker acording to our requirment 
+	The framework support integration with rabbitMq, Kafka, kafka stram, and amozon kinesis.
+	
+	Building blocks of spring cloud strams are :
+	1) Destination Binders : components responsible to provide integration with the external messaging system
+	2) Destination Bindings : Bridge between the external messaging systems and application ccode provides by end user
+	Messsage : The data structure used by producer and consumer to communicate with destination binders 
+	
+===================================================================================================================================	
+	
+Implementing spring cloud stram and rabbitMq binder into spring cloud function 	
+
+	=> add dependancies
+		1)spring-cloud-stream 
+		2)spring-cloud-stream-binder-rabbit
+		
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-stream</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-stream-binder-rabbit</artifactId>
+		</dependency>
+
+	=> add properties
+	
+spring:
+  application:
+    name: message
+  cloud:
+    function:
+      definition: email|sms
+    stream:
+      bindings:
+        email|sms-in-0:	
+          destination: send-communication	// random name
+          group: ${spring.application.name}	
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    connection-timeout: 10s		

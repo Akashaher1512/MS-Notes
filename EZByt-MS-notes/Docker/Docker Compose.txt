@@ -1,0 +1,77 @@
+Docker comopose is used fo multiple instance deployement make easy 
+it is configuration yaml file that we can use in any stage of production to configure the image instance deployement
+it helps to start , stop , and rebuild services 
+veiw the status of serivices 
+Stram the log ouyput of the services 
+
+-------------------------------------------------------
+To use it we need to create configuration file , we can create it anywhere
+
+name should be : docker-compose.yml
+
+---------------------------------------
+services:
+  accounts:
+    image: "akashaher/accounts:s4"
+    container_name: accounts-ms
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 700m
+    networks:
+      - ezbank
+  loans:
+    image: "akashaher/loans:s4"
+    container_name: loans-ms
+    ports:
+      - "8090:8090"
+    deploy:
+      resources:
+        limits:
+          memory: 700m
+    networks:
+      - ezbank
+  cards:
+    image: "akashaher/cards:s4"
+    container_name: cards-ms
+    ports:
+      - "9000:9000"
+    deploy:
+      resources:
+        limits:
+          memory: 700m
+    networks:
+      - ezbank
+networks:
+  ezbank:
+    driver: "bridge"
+
+------------------------------------------------------------
+
+now all the services start in single command 
+
+docker compose up
+
+run this command where docker-compose.yml file is present
+
+-------------------------------------
+docker compose up -d
+
+for datched mode run this command
+
+----------------------------------
+docker compose down 
+
+to down and delete containers created
+
+--------------------------------
+docker compose stop
+
+to stop container but it not delete it
+-------------------------------------
+docker compose start 
+
+it used to up existing comtainers 
+

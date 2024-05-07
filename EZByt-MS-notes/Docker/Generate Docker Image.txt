@@ -1,0 +1,110 @@
+	First We need to declair packaging strucutr as jar in pom.xml {<packaging>jar</packaging>} for all the approches
+
+
+1) using DockerFile
+	i) First We need to declair packaging strucutr as jar in pom.xml {<packaging>jar</packaging>}
+	ii) Create file with the name of `Dockerfile` without any extension. create it parellel to pom.xml
+	To generate any docker image we have to installed java in system 
+	
+	----------------------------
+	FROM openjdk:17-jdk-slim 
+
+	MAINTAINER akash
+
+	COPY target/accounts-0.0.1-SNAPSHOT.jar accounts-0.0.1-SNAPSHOT.jar
+	
+	ENTRYPOINT ["java","-jar","accounts-0.0.1-SNAPSHOT.jar"]
+	
+	----------------------------
+	
+		=> from `FROM`command we are telling docker that my project has external dependencies 
+		=> from `MAINTAINER` we are telling who is maintainer of this project 
+		=> from `COPY` we are telling docker to copy this jar from target folder to docker container
+		=> from `ENTRYPOINT` we are telling docker how to execute the application
+	----------------------------
+
+	iii) Provide Docker file to Docker server so docker create image with instruction mention in file
+		execute this in cli
+		docker build . -t akashaher/accounts:v1
+		
+		akashaher => username of the docker user
+		accounts => name to give to image
+		v1 => tag to image
+			
+		docker build . -t dockerUsername/imagename:tagInfo	
+
+
+2) using BuildPacks
+	i) if we have spring-boot-maven-plugin we have directly access to buildpacks we just need to mention image name in our pom.xml configuration section and docker image automaticaly get generated 
+
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<image>
+						<name>akashaher/${project.artifactId}:s4</name>
+						<builder>paketobuildpacks/builder-jammy-base:latest</builder>
+					</image>
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+					</excludes>
+				</configuration>
+			</plugin>	
+
+	ii) 
+					<image>
+						<name>akashaher/${project.artifactId}:s4</name>
+						<builder>paketobuildpacks/builder-jammy-base:latest</builder>
+					</image>
+		hear <name>username/projectname:tagname</name>
+		**** make sure imagename should be in lower case ie. {project.artifact} id contain artifact name in lower case otherwise it not work
+	
+	iii) then we need to run (mvn spring-boot:build-image) to the pom.xml level it will build image of project
+
+	
+
+3) using google jib 
+	i) go to https://github.com/GoogleContainerTools/jib
+	ii) under readme click on maven or gradle acording to youer build it will redirect us where this pulgin avilables
+	iii) copy plugin and add it to the pom.xml pulgin section
+
+	<plugin>
+        	<groupId>com.google.cloud.tools</groupId>
+        	<artifactId>jib-maven-plugin</artifactId>
+        	<version>3.4.0</version>
+        	<configuration>
+          		<to>
+            			<image>myimage</image>
+          		</to>
+        	</configuration>
+      	</plugin>
+
+	iv) <image>akashaher/${project.artifactId}:s4</image> 
+		hear <image>username/projectname:tagname</image>
+		**** make sure imagename should be in lower case ie. {project.artifact} id contain artifact name in lower case otherwise it not work
+
+	v) to build image run command in cmd at pom.xml level ( )
+
+
+			$env:DOCKER_USERNAME="akashaher"
+			$env:DOCKER_PASSWORD="akashaher@1512"
+			mvn compile jib:dockerBuild
+		in case of authentication use this
+
+
+	vi) google jib provide consistecy , security , performance 
+-------------------------------------------------------------------------------
+
+**** if it gives error of unothentication then run this command 
+	-- docker login registry-1.docker.io --
+
+
+---------------------------------------------------------------------------------
+dockrfile provide lot of flexibility ti us
+buildpacks and jib provide easy creation of images by using cmd and just adding some configuration in pom.xml
+jib only works with java based applications
+buildpacks has multilanguage support 
+jib is more memory efficient 

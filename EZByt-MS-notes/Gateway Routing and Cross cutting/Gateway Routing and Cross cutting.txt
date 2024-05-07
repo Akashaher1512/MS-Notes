@@ -1,0 +1,194 @@
+
+Problem We have is 
+=> how we maintain single entry point into microservices network
+=> how we handle cross cutting concerns
+=> how do we route based on custome requirments
+
+To solve this problem can be solved using edge server ie. api gateway 
+
+why we need a seprate edge server (Api gateway) for our services?
+=> imajin client trying to comunicate with ouer 3 diffrent microservices.
+=> in the senario of multiple clients directly connected with various services, sevral chalanges arives , for example, client must be aware of the urls of all services, and enforcement common requirments such as security , auditing, logging and routing become a repetative task across all services
+=> to overcome this challange we nees single point gateway to microservices network.
+
+=>  gateway accept all request fron diffrent clients process it and then give them to the servises 
+	we can implement,
+		=> authentication
+		=> retries
+		=> rate limit form perticular client
+		=> dynamic routing
+		=> modifying request/response
+		=> protocol conversion
+		=> timeout 
+		=> quata limitations 
+		=> exception handling
+		=> implimenting circuitbreaker 
+	this logic we can perform in gateway.
+		
+
+=================================================================================================================================
+Introduction to spring cloud gateway
+=> This use to build edge server. It build based on spring reactive framework, it can seamlessly expand and handle the significant workload that tipycally arives at the systems egde while maintaining the optimL scalability
+
+Key Aspects of gateway => 
+
+=> the service gateway sits as the gatekeeper for all trafic to microservices calls within our application, when service gateway in place, clients never directly call the urls of an indivisual services, insted they call to service gateway
+
+=> Spring cloud gateway is liberary to buid this so it looks like any other spring application, we can start with it in very few line of code
+
+=> it can inercept, analyze and m odify any request. that means we can rout requests based on thier context. did a request include a header include an indicating api version then we can rout that request to that perticular versioned backend 
+
+=> the gateway can track each users sessions
+
+
+===================================================================================================================================
+Spring cloud gateway internal architecture
+
+request from client => gateway handler mapping using routing configs => predicates (To check if the request fullfill the set of given conditions) => pre filters => request to services => response from services => post filters => gateway handler mapping using routing configs => response to client 
+
+===================================================================================================================================
+Building edge server using spring cloud gateway
+=> add dependencies
+	1. spring-cloud-starter-gateway => reactive gateway 
+	2. spring-cloud-starter-netflix-eureka-client => to regster it with eureka
+	3. spring-cloud-starter-config	=> to maintain centralize confiuration
+	
+	
+=> do configuration
+
+spring:
+  application:
+    name: "gatewayserver"
+  config:
+    import: "optional:configserver:http://localhost:8071/"
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true		// connect with discovery server and locate all the services avilable and use the same to diver trafic
+		  
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    gateway:
+      enabled: true					// enable gateway server
+  info:
+    env:
+      enabled: true
+
+server:
+  port: 8072
+
+eureka:
+  instance:
+    preferIpAddress: true
+  client:
+    fetchRegistry: true
+    registerWithEureka: true
+    serviceUrl:
+      defaultZone: http://localhost:8070/eureka/
+info:
+  app:
+    name: "gatewayserver"
+    description: "EzBank gateway server application"
+    version: "1.0.0"
+	
+	
+
+
+===================================================================================================================================
+Demo of edge server with default routing config
+	run service registry, all the applications at last run gateway because it need all services data from service registry
+	
+=> http://localhost:8072/actuator/gateway/routes => use this url to see what paths are exposed for what service 
+
+ eg. for => localhost:8080/api/create             we can pass 
+		 => localhost:8072/ACCOUNTS/api/create		// if we pass ACCOUNTS it will map it to actual path automaticaly
+		 
+		 we need to pass service name in capital letters only ,
+		 
+
+===================================================================================================================================
+Make changes inside gateway server to accept service name with lower case
+
+=> to do this add this property in gateway 
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true					// this is for service data fetch from eureka 
+          lower-case-service-id: true	// add this property to enable lowercase service id
+
+=> now we can pass it as
+ eg. for => localhost:8080/api/create             we can pass 
+		 => localhost:8072/accounts/api/create
+		 
+===================================================================================================================================
+Implementing custom routing using spring clude 
+
+we care passing url as ,
+		 => localhost:8072/accounts/api/create
+But i want it as,
+		 => localhost:8072/ezbank/accounts/api/create
+because its more professional and giving idea of our domain to do this we have to do custome routing,
+
+to do this we have to declaire bean of RouteLocator, we can do it using aslo with properties file but defining it with java is good practice and it give us more flexibility,
+
+@SpringBootApplication
+public class GatewayserverApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(GatewayserverApplication.class, args);
+	}
+
+	@Bean
+	public RouteLocator ezBankRouteConfig(RouteLocatorBuilder routeLocatorBuilder){
+		return routeLocatorBuilder.routes()		// define multiple routes
+				.route(							// define route
+						p-> p.path("/ezbank/accounts/**")						
+								.filters(f -> f.rewritePath("/ezbank/accounts/(?<segment>.*)","/${segment}"))
+								.uri("lb://ACCOUNTS"))
+					// remove value "/ezbank/accounts/**" from that ** path and map it to "lb:ACCOUNTS/**" path			
+				.route(
+						p-> p.path("/ezbank/loans/**")
+								.filters(f -> f.rewritePath("/ezbank/loans/(?<segment>.*)","/${segment}"))
+								.uri("lb://LOANS"))
+				.route(
+						p-> p.path("/ezbank/cards/**")
+								.filters(f -> f.rewritePath("/ezbank/cards/(?<segment>.*)","/${segment}"))
+								.uri("lb://CARDS"))
+				.build();
+	}
+}
+
+
+
+===================================================================================================================================
+Demo Of addResponseHeader Filter
+
+we can add multiple filters inside filters method 
+
+@Bean
+	public RouteLocator ezBankRouteConfig(RouteLocatorBuilder routeLocatorBuilder){
+		return routeLocatorBuilder.routes()
+				.route(
+						p-> p.path("/ezbank/accounts/**")
+								.filters(f -> f.rewritePath("/ezbank/accounts/(?<segment>.*)","/${segment}")
+										.addResponseHeader("X-Response-Time", LocalDateTime.now().toString())) // just do this
+								.uri("lb://ACCOUNTS"))
+				.build();
+	}
+
+===================================================================================================================================
+Implementing cross cutting concerns tracing and
+
+===================================================================================================================================
+
+
+
+
+		

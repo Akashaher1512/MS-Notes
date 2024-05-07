@@ -1,0 +1,537 @@
+
+How we are going to debug in microservices?
+how we are going to combine logs from diffrent services?
+how we are going to monitor performance of services?
+how we are going to monitor services matrix and health ?
+
+with help of observabilit and monitoring we can overcome this chalanges.
+
+==========================================================================================================
+Obervability vs monitoring
+
+Obervability => 
+	It is Ability to understand the internal state of a system by observing its outputs. in the microservices, observability is achived by collecting and analyzing data from various sources, such as metrics, logs and traces
+	
+	pillars of Obervability
+	
+		1) Metics ==> this are the messurements of the health of the system, they can be used to trac ck things like cpu usage, memmory usage and response times
+		
+		2) Logs ==> logs are a record of events that occure in a system. They can be used to track things like errors, exceptions and other unexpected events.
+		
+		3) Traces ==> Traces are a record of path that a request takes through a system. they can be used to track a performance of a request and to identify any performance isuuses 
+		
+	purpose => understand the internal state of system
+	Date => metrics, traces, logs and other data 
+	Goal => understand how system works 
+	Approch => protective
+	
+monitoring =>
+	It involves checking the telemetry data avilable for the application and defining alerts for known faliluer states. this process collects and analyzing data from a system to identify and troubleshoot problems, as well as track the health of indivisual microservice and the overall health of the microservice network.
+	
+	monitoring in microservice is important becaus
+		
+		1) Identify and trobleshoot problems => By collecting and analyzing data from your microservice, you can identify problems before they cause any outage or other problems.
+		
+		2) Track the health of microservices => Monitoring can help you to track the health of microservices, so you can identfy any microservice that are underperformiong or that are experioncing problems.
+		
+		3) Optimize youer microservices => by monitoring microservices. we van identify areas where we can optimize your microservices to improve performance and relability
+
+	
+	purpose => identify and trobleshoot problems
+	Date => metrics, traces, logs 
+	Goal => identify problems
+	Approch => reactive
+	
+	
+	==> whatever we are going to see is monitoring 
+	==> whatever information we cant see until we go and see logs its observability
+	
+
+=======================================================================================================================================
+Centralized Logging [log aggregation] 
+	=> logs are records of events that happning in any service over the time. they contain a timestamp of creation as weel as well well informed information of event and its context. this information can be used to answer the quetions like "what happen at the time?","which thread was processing the event?", "which user was in the contect?" 
+	
+	=> logs are essential tools for troubleshooting and debugging tasks. logs are categorised acording to type of event such as trace, debug, info, warn and error. this allows us to log only the most severe events at production. while still fiving us chance to change the log level tempororly during debugging
+		
+	Logging in monolithic application is easy becouse we have logs in single location 
+
+	Logging in microservices => it is comples task becaus each service have diffrent files for logs, aslo our request is going though multiple services so its hard to find issue 
+	
+	To overcome this chanllane we use centralize aproch for logging and store the logs at a centralize location 
+	
+	To perform Log agregation we can use grafana tool 
+	
+	
+	
+=======================================================================================================================================	
+Managing Logs with grafana, loki and promtail
+	=> grafana is compony which provides open source tools for various uses
+	
+	=> grafana loki => implement log agregation system
+	=> promtail with grafana => metrics, dashboard, alerts ect.
+	=> grafana tempo => tracing logs 
+	
+	In real time projects it's not devlopers responsibility to implement monitoring and observability , operation and platform team implements it.
+	
+	
+	1) Grafana Loki => it is horizhontaly scalable, highly avilable, and cost efficient log aggregation system. It design to be easy to use and to scale to meet the needs of most of the applications
+	
+	2) Promtail => is lightweigh log agent that ships logs form your containers to loki. It is easy to configure and can be used to collect logs from a wide varity of saourcess.
+	
+	Together, grafana loki and promtail provides powefull logging solution that can help you to understand and troubleshoot your application.
+	
+	Grafana provides visualization of the log lines captured within loki
+	
+		promtail [fetch logs from services] => forword logs to ==> loki [Loki stores log]=> gaafana [Visualize logs, search logs etc. ]
+
+
+=======================================================================================================================================	
+logging using grafana, loki 
+
+	=> https://grafana.com/docs/loki/latest/get-started/
+
+	how loki stores logs 
+	
+	*=> [service] generating logs => we deploye [promtail] in same network to [service] generating log => promtail transport logs to [loki write component] via passing through [api gateway] => this logs stor into [MinIO]
+
+	*=> we deploye [grafana] outside, [Grafana] 	fetch logs from [loki read component] via passing through [api gateway] => [Loki read component] fech the logs from [MinIO] and return it to [grafana] 
+		
+	MinIo => is storage location where logs are stored 
+	
+	
+=======================================================================================================================================	
+Implementing logging using grafana, loki 
+
+	we did not need to change any line of code inside microservises.
+
+==> https://grafana.com/docs/loki/latest/get-started/
+	go to this and follow the steps 
+
+==> remove flog application cause this is only for demo of log aggregation
+
+==> take files from above url
+==> under out docker-compose folder 
+	=> create folder loki => paste file loki-config.yml inside it
+	=> create folder promtail => past file promtail-config.yml inside it 
+	=> now do changes in our docker compose file to add the configuration for loki, grafana, promtail,  read and write components 
+	=> configure all the things and run docker compose file
+	
+	==> for refrence see => s11=> prod => docker-compose file
+	
+	
+	==> after running the docker compose 
+	
+	=> http://localhost:3000/ ==> go to this [3000 is grafana's port]
+	=> we see ui hear 
+	=> click on home => connections => data sources => we can see loki datasource here 
+	
+	=> click on home => explore => selest lable filter as 'container' as we mention it in docker-compose file
+	=> whichever service log you want to see just select this and click run query 
+	=> click on live if  you want to see live logs 
+	=> if want to see specifig logs containg some text => add operation lines contains and search the text 
+	=> we have line filter options like	
+			=> line dose not contains
+			=> line contains case sensitive 
+			=> line doce not contains case sensitive 
+			=> line contain regesx match
+			=> line dose not contain regesx match
+			
+			
+			
+			
+=======================================================================================================================================	
+Managing metrics and monitoring with actuators, micrometer, prometheus and grafana
+	=> metrix are numerical measurements of an application's performance, collected and aggregated at regular intervals.
+	=> they can be used to monitor the applications health and performance, and to set alerts or notifications when threshhold are exceeded 
+	
+	By using ==>
+	
+	1) actuators => it exposes health , metrix, info, dump, env etc, it exposes http endpoints  
+	2) micrometer => it exposes the actuators/metrix data into something that youer monitoring system can understand . all we need to do is include that vendor-specific micometer depandancy in our aaplication. 
+	3) prometheus => an open source system monitoring and alerting toolkit. just as loki aggregates and stores the logs , prometheus dose the same with metrics, it provides ui also 
+	4) Prometheus with grafana => visualization of metrics, used to create dashboards and charts, aslo can generate alerts.
+	
+	
+	Micrometer => works as facade pattern => it is going to deploye front facing intrtface which handle complx parts behind 
+	
+
+=======================================================================================================================================	
+Setup of micrometer inside microservice
+
+	1) add dependancy in all idividual services => micrometer-registry-prometheus
+	
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
+		
+		
+	2) add properties 
+		=>   management.metrics.tags.application= ${spring.application.name}
+		
+	==> http://localhost:8080/actuator/metrics/ ==> go and visit this url to see metrix 
+	
+	==> http://localhost:8080/actuator/prometheus ==> go to see prometheus info 
+=======================================================================================================================================	
+setup of prometheus inside microservices //reffer s11 for all yml config
+
+	=> create folder prometheus inside observabilit folder
+	=> add prometheus.yml file inside it 
+	
+global:
+  scrape_interval:     5s # Set the scrape interval to every 5 seconds.
+  evaluation_interval: 5s # Evaluate rules every 5 seconds.
+
+scrape_configs:
+  - job_name: 'accounts'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ 'accounts:8080' ]
+  - job_name: 'loans'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ 'loans:8090' ]
+  - job_name: 'cards'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ 'cards:9000' ]
+  - job_name: 'gatewayserver'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ 'gatewayserver:8072' ]
+  - job_name: 'eurekaserver'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ 'eurekaserver:8070' ]
+  - job_name: 'configserver'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: [ 'configserver:8071' ]
+	  
+	  
+	  
+	=> add prometheus code inside docker-compose file above grafana 
+	
+service:
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      -../observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    extends: 
+      file: common-config.yml
+      service: network-deploy-service	
+  	
+	
+	=> need to mention datasource for prometheus in grafana inside new folder observabilit/grafana / datasource.yml
+
+apiVersion: 1
+
+deleteDatasources:
+  - name: Prometheus
+  - name: Loki
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    url: http://prometheus:9090
+    access: proxy
+    orgId: 1
+    basicAuth: false
+    isDefault: false
+    version: 1
+    editable: true
+    jsonData:
+      httpMethod: GET
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    orgId: 1
+    editable: true
+    url: http://gateway:3100
+    jsonData:
+      httpHeaderName1: "X-Scope-OrgID"
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: "\\[.+,(.+),.+\\]"
+          name: TraceID
+          url: '$${__value.raw}'
+    secureJsonData:
+      httpHeaderValue1: "tenant1"	
+	  
+	
+
+=======================================================================================================================================	
+Demo of prometheus and grafana integration
+
+	=> run docker compose file 
+	=> http://localhost:9090/targets => execute this url we can see all the services and its status 
+	=> click on map and we can see any matrix like cup usage in graph
+	
+	to see integration with grafana go to grafana => connections => datasource
+	=> http://localhost:3000/connections/datasources 
+	=> select prometheus
+	
+	=> now go to grafana / explore / select prometheus
+	=> here we can select metrics and lables filters to see graphs
+	
+	
+	
+
+=======================================================================================================================================	
+Demo of Grafana inbuild and custom dashboard 
+
+	=> go to => https://grafana.com/grafana/dashboards/  => for predefined dashboards
+	=> search jvm as we are looking for java based graphs
+	=> copy the link of any dashboard 
+	=> go to our grafana running instance and login with => username => admin && password=> admin
+	=> click on menu / dashboard/ import ==> paste the url we have coppied => select datasource as prometheus
+	=> now we have the dashboard that we can use
+	
+	=> search spring boot in dashbord to add one more dashboard => spring boot 2.1 system monitor
+	=> it show usefull data 
+	
+	Custome Dashboards => create new dashboard => give name => now add visualization .....anything 
+=======================================================================================================================================	
+Create alerts and send notifications using grafana
+	=> click on menue => click on alerting => alert rule => create new alert rule 
+	=> select datasource prometheus 
+	=> select metrics as up => lable as job => value as accounts
+	=> Reduce => input as A => function as last => mode as Strict
+	=> Threshhold => input B => is below 1 
+	
+	=> Also we need to define alert notification point ie. contact point 
+	
+	
+	=> we can directly configure alert into garph present in dashboard 
+	
+	
+=======================================================================================================================================	
+Intoduction to distribute tracing in microservice
+	=> Request travel through multiple services so it is hard to find if any issue occers 
+	=> to track flow of request we use didtribute tracing 
+	
+	=> we generate unique identifier correlation id and pass is through request to trace the request through multiple services
+	=> but generating and providing correlation id for each request through manual coding is very hard task to overcome this we use some tools like [spring Colud sleuth, 
+	
+	=> Concepts in disributed tracing 
+		1) tags => serves as metadata that offers details about span context, including the request url, the username of the authenticated user or the identifer for specific tenant.
+		2) trace id =>it should be generated at start of the request [at gateway server] and travel thorughout with request , same traceid should attached to logs 
+		3) span id => span represent each indivisual stge of request processing, encompassing start and end timestamp and is uniquely identifeid by span id 
+		
+		[servicename, trace_id, span_id]
+		[gatewayserver, A123, X678]
+		[accounts, A123, K890]
+		[loans, A123, H2020]
+		[loans, A123, H2020]
+		
+		servicename => diffrent for each services acording to its name
+		trace_it => same foe each request in all services
+		span_id => same for evry request inside a single microservice , diffrent for each service 
+		
+		with all this we can attach metadata with this also
+		
+		
+		=> to implements disributed tracing we have some options
+			1) spring cloud sleuth =>
+				we just need to add dependanci of this and it will work. provieds [servicename, trace_id, span_id] this format.
+				we can integrate it with zipkin to identify tracing details to identify the issues
+				
+				-- But this is outdated now so we are going with new option for tracing  
+				
+			2) micrometer tracing =>
+				by this approch we can trace the logs also
+				it aslo has integration with zipkin and telemetry
+				but this approch requirds lots of changes so we are not going with this approch 
+			
+			3) OpenTelemetry => 
+				this approch dose not requirds lots of chnages so we are going with this approch 
+=======================================================================================================================================	
+Intoduction to OpenTelemetry
+	=> it is open source project 
+	=> we can integrate it with spring, asp.net, express etc so we can use it with multiple languages 
+	
+	=> https://opentelemetry.io
+		go to 
+	=> https://opentelemetry.io/docs/languages/java/ 
+		go to 
+	=> https://opentelemetry.io/docs/languages/java/automatic/
+	
+	=> we need to add jar of opentelemetry-javaagent
+	
+	=> add dependancy in all services
+		//<otelVersion>1.32.0</otelVersion>
+		
+		<dependency>
+			<groupId>io.opentelemetry.javaagent</groupId>
+			<artifactId>opentelemetry-javaagent</artifactId>
+			<version>${otelVersion}</version>		
+			<scope>runtime</scope>
+		</dependency>
+		
+	=> add this properties in properties file
+
+logging:
+  pattern:
+    level: "%5p[${spring.application.name},%X{trace_id},%x{span_id}]"	
+	
+	here, 
+	%5p => assign some 5 length character before aaplication name (log seviority like , debug, info , warning, error )
+	[] 	=> ${spring.application.name} => application name
+		=> %X{trace_id} => generated by opentelemetry at runtime insert this heare
+		=> %X{span_id} => generated by opentelemetry at runtime insert this heare
+		
+		
+	By using this we can add the solution to log tracing, but we need more simplification for it so that we can controll this from ui
+		=> to do this we can integrate this with grafana using tempo
+		
+	1) opentelemetry => generate traces and span at runtime
+	2) Tempo => just like loki for logs and prometheus for metrix we can use Tempo for indexing all the trace information, using Tempo we can store, retrivem and analyzing all the trace information 
+	3) Grafana => it connect to Tempo and it will show visualization of tracing
+	
+=======================================================================================================================================	
+Implementing tracing using grafana, tempo and opentelemetry
+
+=> mention envoirment details common for all services insdie common-config file 
+=> it is common for all services so i am mentioning it under microservice-base-config
+service:  
+  microservice-base-config:
+    extends:
+      service: network-deploy-service
+    deploy:
+      resources:
+        limits:
+          memory: 700m
+    environment:
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/libs/opentelemetry-javaagent-1.32.0.jar"		// where is my jar opentelemetry jar present 
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317	// to export trace from opentelemetry to tempo via 4317 port
+      OTEL_METRICS_EXPORTER: none			//i dont want to export metrics using telemetry cause we are doing it with micometer
+	  
+	  
+=> now mention which service name should register with opentelemetry for each service 
+=> add environment variable to each service in docker-compose file
+
+environment:
+      OTEL_SERVICE_NAME: "configserver"	// servicename => accounts, loans etc mention for each
+	  
+==> add configuration related to tempo
+==> observability/tempo/tempo.yml
+server:
+  http_listen_port: 3100
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+        http:
+
+ingester:
+  trace_idle_period: 10s
+  max_block_bytes: 1_000_000
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    compaction_window: 1h
+    max_compaction_objects: 1000000
+    block_retention: 1h
+    compacted_block_retention: 10m
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /tmp/tempo/blocks
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+
+
+==> add new service just above grafana in docker compose file for tempo
+tempo:
+    image: grafana/tempo
+    container_name: tempo
+    command: -config.file /etc/tempo-config.yml
+    ports:
+      - "3110:3100"
+      - "4317:4317"
+    volumes:
+      - ../observability/tempo/tempo.yml:/etc/tempo-config.yml
+    extends:
+      file: common-config.yml
+      service: network-deploy-service
+
+==> add chnages in datasource.yml file related tempo
+
+apiVersion: 1
+
+deleteDatasources:
+  - name: Prometheus
+  - name: Loki
+  - name: Tempo				// added this
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    url: http://prometheus:9090
+    access: proxy
+    orgId: 1
+    basicAuth: false
+    isDefault: false
+    version: 1
+    editable: true
+    jsonData:
+      httpMethod: GET
+  - name: Tempo				// added this 
+    type: tempo
+    uid: tempo
+    url: http://tempo:3100
+    access: proxy
+    orgId: 1
+    basicAuth: false
+    isDefault: false
+    version: 1
+    editable: true
+    jsonData:
+      httpMethod: GET
+      serviceMap:
+        datasourceUid: 'prometheus'
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    orgId: 1
+    editable: true
+    url: http://gateway:3100
+    jsonData:
+      httpHeaderName1: "X-Scope-OrgID"
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: "\\[.+,(.+),.+\\]"
+          name: TraceID
+          url: '$${__value.raw}'
+    secureJsonData:
+      httpHeaderValue1: "tenant1"	  
+	  
+	  
+	 => run the services
+	=> search tracing id in tempo and you will see all the information with time and trace 
+	  
+=======================================================================================================================================	
+Navigating to tempo from loki logs
+
+	=> go to loki datasource setting
+	=> add derived field 
+	=> name = traceID
+	=> regex => give pattrn 
+
+
+=======================================================================================================================================	
+Conclusion 
+=======================================================================================================================================	
+		

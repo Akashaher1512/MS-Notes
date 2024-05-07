@@ -1,0 +1,587 @@
+
+What Challanges we have?
+
+1) how do we avoid cascading failuer?
+2) How do we handle failuer gracefully with fallback?
+3) How to make our services self-healing capable?
+
+=> we can use hystrix for resiliency, it is library devloped by netflix team,
+=> hystrix is in maintainence mode from 2018, so we use Resilience4J library
+=> Resilience4J => it provie lots of pattern to make our microservices resilience and fault tollerant
+
+Resilience4J =>
+	lightweight fault tollerance library designed for functional programing, it offers following patterns for increse fault tollerrance due to network problem or failuer of any service.
+	
+		1) Circuit breaker 	=> used to stop making requests when service invoke is failing
+		2) FallBack 		=> Alternative paths to falling requests
+		3) Retry 			=> used to make retries when a service has tempororliy faild
+		4) Rate Limit 		=> limit the number of calls that a service receives in a time
+		5) BulkHead 		=> limits the number of outgoing concurrent requests to a service to avoid overloading
+
+	=> https://resilience4j.readme.io/docs
+
+
+===================================================================================================================================
+Typical scenario where we need Resiliancy =>
+
+consider we fetching customer data ie. "/fetchCustomerDetail"
+
+this api fetch customer, account, loan and cards details
+account service have details of customer and account ,
+for loan and cards detail we need to fetch it from loans service and cards service respectivly
+
+if one on microservice in this flow is not working properly (imajin cards microservice not working properly)
+so, if we give call from accounts service to cards service to fetch cards details and if its not responding prperly and it took 10 seconds and still its not responding . in that case,
+thread in my account service is busy gor 10 seconds and it occupies that memory from application,
+i.e due to cards microservice performace issue we get reple iffect on account microservice, due to account microservice waiting for that long we have this issue on gateway server. so gateway aslo waiting and it will effect more trafic coming toword gateway and it slow down more.
+due to just one service we get effect on all the application.
+
+To handle this type senarios we can use circuit breker pattern.
+
+===================================================================================================================================
+Cuircuit Breaker Pattern =>
+	=> In a distributed enviorment, calls to remote recoureces and services can fail due to transient fault, such as network connections, timeouts, or the rescource not temporary avilable. this faults typically correct themselves after a short period of time , and a robust cloud application should be prepared to handle them 
+	
+	=> The circuit breker pattern which inspires from electric cuircuit breker will monitor the remote calles. if any calle takes to long , the circuit breaker will intercept and kill the call, also, the circuit breaker will monitor all calls to a remote resource, and if enough cakks fails, the circuit break implimentation will pop, falling fast and prevernting future calls to the falling remote resource.
+	
+	=> cuircuit breaker stop all traffic going toword defective microservice to give time for healing of microservice after healing calls towords it again starts 
+	
+	Advantages of circuit breaker patter is => 
+		1) fail fast
+		2) Fail gracefully
+		3) Recover seamlessly
+-----------------------------------------------------------------------------------------------------------
+Three Stages of Circuit breaker pattern =>
+	1) Closed => initially the circuit brealer starts with close status and accept client's requests 
+	
+			====> when failuer rate above threshhold (like if 50% of traffic is failing move to open stage)===>
+			
+	2) Open => if circuit breaker sees a threshhold requests are falling, then it will OPEN the circuit which will make requests to fail fast 
+	
+			=======> after configure time of open stateus (like 30 sec , 90 sec etc) ======>
+	
+	3) Half_Open => cuircuit breaker checks if issue is resolved by allowing few requests , based on the result it will either go to Closed or open 
+
+			======> if issue is still present  	====> Open Status
+			======> if issue is resolved 		====> Closed Status
+			
+
+---------------------------------------------------------------------------------------------------
+
+Implementing circuit breaker pattern in gateway =>
+	1) add dependency => resilience4j => make sure to add reactor-resilience4j 
+	
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
+		</dependency>
+		
+	2) go to main class and add circuitBreaker filter =>
+	
+	routeLocatorBuilder.routes()
+				.route(
+						p-> p.path("/ezbank/accounts/**")
+								.filters(f -> f.rewritePath("/ezbank/accounts/(?<segment>.*)","/${segment}")
+										.addResponseHeader("X-Response-Time", LocalDateTime.now().toString())
+										.circuitBreaker(config -> config.setName("accountsCircuitBreaker"))	// this if filter 
+								)
+								.uri("lb://ACCOUNTS"))
+
+	3) add properties =>
+	
+resilience4j.circuitbreaker:
+  configs:
+	default:
+	  slidingWindowSize: 10 	// monitor atleast 10 requests comming towords ms after that take decision wheter to open state or not
+	  permittedNumberOfCallsInHalfOpenState: 2 // permited number of calls in half open status afer that take dicission to open or close
+	  failureRateThreshold: 50	// 50% of requests are failed then circuit breaker move to close to open 
+	  waitDurationInOpenState: 10000 // wait 10 seconds to move from open to half open stage to give healing time to ms
+
+			---------------------------------------------------------------------
+	==> Now we can see the information relaated to circuitBreaker in actuator console
+		==> http://localhost:8072/actuator/circuitbreakers
+		==> we can see this information 
+		
+	{
+		"circuitBreakers": {
+			"accountsCircuitBreaker": {
+			"failureRate": "-1.0%",
+			"slowCallRate": "-1.0%",
+			"failureRateThreshold": "50.0%",
+			"slowCallRateThreshold": "100.0%",
+			"bufferedCalls": 1,
+			"failedCalls": 0,
+			"slowCalls": 0,
+			"slowFailedCalls": 0,
+			"notPermittedCalls": 0,
+			"state": "CLOSED"
+			}
+		}
+	}
+
+
+		==> we can also see the events at circuitBreaker by using name we given to circuitBreaker
+			==> http://localhost:8072/actuator/circuitbreakerevents?name=accountsCircuitBreaker
+
+	-----------------------------------------------------------------------------------------------
+Now to replicate threshhold im going to put breakpoint on the requests controller method and not going to relese it so we can create issue for cuircuitBreaker
+
+Now send multiple requests and circuitBreaker status will open 	
+			==> http://localhost:8072/actuator/circuitbreakers
+	
+	check it hare that circuitBreaker open and we get message "upstream service unavilable"
+	
+	Now weight for 10 sec and circuitBreaker will in half_open stage,
+		now if at this stage we if requests are processed successfully then status of circuitBreaker gets Closed
+		otherwise its still OPEN and agian after 10 seconds its go under half_open stage 
+
+
+------------------------------------------------------------------------------------------
+adding fallback response to it => 
+showing erros in runtime application is not good practice so we need to send some message as fallback for good practice 
+consider we are envoking accounts "/contact-info" and it not responding so we are going to create fallback for it,
+
+	1) create Controller in gateway
+
+@RestController
+public class FallBackController {
+
+    @RequestMapping("/contactSupport")		// make sure its @ReuestMapping
+    public Mono<String> contactSupport(){
+        return Mono.just("An Error occurred, Please try after some time or contact support team.")
+    }
+}
+
+
+now we just need to mention it in circuitbreaker
+
+routeLocatorBuilder.routes()
+				.route(
+						p-> p.path("/ezbank/accounts/**")
+								.filters(f -> f.rewritePath("/ezbank/accounts/(?<segment>.*)","/${segment}")
+										.addResponseHeader("X-Response-Time", LocalDateTime.now().toString())
+										.circuitBreaker(config -> config.setName("accountsCircuitBreaker")
+										.setFallbackUri("forward:/contactSupport"))	// this is fallback configration 
+								)
+								.uri("lb://ACCOUNTS"))
+
+now in case of open circuitbreaker we get this fallack insted of errors 								
+								
+	
+	
+-----------------------------------------------------------------------------------------------------------------------------------
+Implementing circuit breaker pattern with feignClient =>
+	=>Integration between  feignClient and circuitbreaker are avilable. we can use this directly when we using feignClient in our service
+	=> If Spring Cloud CircuitBreaker is on the classpath and 
+		=> spring.cloud.openfeign.circuitbreaker.enabled=true
+		 Feign will wrap all methods with a circuit breaker
+
+	=> add dependency of circuitbreaker => normal dependency not a reactive
+	
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+		</dependency>
+		
+	=> add this property
+		=> spring.cloud.openfeign.circuitbreaker.enabled=true
+	
+	now circuitbreaker is avilable inside our service,now add the properties of circuitbreaker
+===> 
+
+resilience4j.circuitbreaker:
+  configs:
+	default:
+	  slidingWindowSize: 10 	// monitor atleast 10 requests comming towords ms after that take decision wheter to open state or not
+	  permittedNumberOfCallsInHalfOpenState: 2 // permited number of calls in half open status afer that take dicission to open or close
+	  failureRateThreshold: 50	// 50% of requests are failed then circuit breaker move to close to open 
+	  waitDurationInOpenState: 10000 // wait 10 seconds to move from open to half open stage to give healing time to ms
+	
+	
+	=> add Feign Spring Cloud CircuitBreaker Fallbacks mechanism 
+		=> where we using the @FeignClient anotation on interface 
+		=> give parameter in that interface ie. @FeignClient(name="test",url="http://localhost:8090/", fallback = fallbackName.class)
+		=> declare the FallBack class which implementing that interface with @FeignClient anotation and anotate it as @Component
+		=> ovverride that methods and we are all done 
+		
+		
+		
+---------------------------------------------------------------
+eg. 
+
+@FeignClient(name="loans", fallback = LoansFallback.class)
+public interface LoansFeignClient {
+
+    @GetMapping(value = "/api/fetch",consumes = "application/json")
+    public ResponseEntity<LoansDto> fetchLoanDetails(@RequestHeader String correlationId, @RequestParam String mobileNumber);
+
+}
+
+
+fallback mechanism => 
+
+@Component
+public class LoansFallback implements LoansFeignClient{
+    @Override
+    public ResponseEntity<LoansDto> fetchLoanDetails(String correlationId, String mosbileNumber) {
+			// return whaterer buissness logic you want 
+        return null;
+    }
+
+}
+
+	=> now behind the seen circuitbreaker create the circuitBreaker for our loansfallback class 
+		=>LoansFeignClientfetchLoanDetailsStringString => fetchLoanDetails is method Sting,String is datatype of our parameters
+		
+	=> now in application if we cant access loans service the fallback mechanisum will return logic return in LoansFallBack class 
+	
+===================================================================================================================================
+Http Timeout Configuration =>
+	=> Due to any problem occres in service and it not responding fast its taking to much time for giving response in that case we have to use http timeout to ovid ither services to pause to much for response from that one service which is slow 
+	
+	=> circuitBreaker configration mention inside gateway aslo have internal configuration of httpTimeout of maximum of 1 second
+	=> if response not occres in 1 second it will introduce fallback imidiatly
+	
+	=> we may not use circuitbreaker pattern all over applications, to achive this timeout in other places we have to configure timeout configuration 
+	
+	=> Http timeouts configuration
+		1) Global timeouts		==> applicable for all routes 
+			add this properties in gateway server 
+				=> spring.cloud.gateway.httpclient.connect-timeout: 1000
+				=> spring.cloud.gateway.httpclient.response-timeout: 2s
+				
+			Gateway throws "message": "Response took longer than timeout: PT5S"	when service take more time than allowed time
+				
+		2)  Per-route timeouts	=> for specific urls 
+				=> 
+					@Bean
+				  public RouteLocator customRouteLocator(RouteLocatorBuilder routeBuilder){
+					  return routeBuilder.routes()
+						  .route("test1", r -> {
+							  return r.host("*.somehost.org").and().path("/somepath")
+								  .filters(f -> f.addRequestHeader("header1", "header-value-1"))
+								  .uri("http://someuri")
+								  .metadata(RESPONSE_TIMEOUT_ATTR, 200)
+								  .metadata(CONNECT_TIMEOUT_ATTR, 200);
+						  })
+					  .build();
+				  }
+	
+		3) if we want to dissable timeout configuration for any route 
+				=> response-timeout: -1	=> configure response timeout as  negative value 
+	
+
+============================================================================================================================
+how to change default configuration of timeout in circuitBreaker pattern.
+=>  mention this in main class of gateway
+	@Bean
+	public Customizer<ReactiveResilience4JCircuitBreakerFactory> defaultCustomizer(){
+		return factory -> factory.configureDefault(id-> new Resilience4JConfigBuilder(id)
+				.circuitBreakerConfig(CircuitBreakerConfig.ofDefaults())
+				.timeLimiterConfig(TimeLimiterConfig.custom().timeoutDuration(Duration.ofSeconds(4)).build())
+				.build()
+		);
+	}
+
+===================================================================================================================================
+Retry Pattern =>
+	=> The retry pattern will make multiple attempts when a service has temporary failed. this pattern is very helpfull in the senarios like network disruption where the client request may successfull after a retry attempts
+	
+	=> here are some key componentes and considerations for this pattern =>
+		
+		1) Retry Logic => determine when and how many times to retry an operation. this can be based on factores such as error codes, exceptions or response status 
+		
+		2) BackOff Stratergy => define a statergy for delaying retries to avoid overwhelming the system or increse the issue. this statergy can involve gradually incresing the delay between each retry, known as exponential backoff.
+			first retry after 2sec => 2nd retry 3sec => 3rd retry 4sec etc....
+		
+		3) CircuitBreaker pattern integration => consider combining retry with circuitbreaker. if a cirtain number of retries fails in row, the circuit breaker can be open to prevent further attempts and preserve system recources.
+
+		4) Idempotent operations => apply this statergy for only Idempotent operations , the operations should not sideeffect on other resource no matter how many times we invoked it. like fetch api operation thare is no harm on other resources no matter how many time we invoke it we gate same response. but if we make this for post opperation it may insert multiple records and data curruption happens
+
+
+implementing Retry Pattern in Gateway =>
+
+.route(
+	p-> p.path("/ezbank/loans/**")
+			.filters(f -> f.rewritePath("/ezbank/loans/(?<segment>.*)","/${segment}")
+					.addResponseHeader("X-Response-Time", LocalDateTime.now().toString())
+					.retry(retryConfig -> retryConfig	
+							.setRetries(3)
+							.setMethods(HttpMethod.GET)
+							.setBackoff(Duration.ofMillis(100),Duration.ofMillis(1000),2,true)))
+			.uri("lb://LOANS"))	
+
+	==> we have .retry(number of retrys) methos also
+	==> we are using .retry(retryConfig) => this takes retryConfig interfaces impantation  it is consumer type interface
+	==> retry config takes information of  [retryConfig, methods, backoff] configurations
+	==> backOff (firstBackOff,maxbackOff,factor,basedOnPriviousValue) takes this information 
+			1) firstBackOff => first backoff time 
+			2) maxbackOff =>  max backed off time can go upto this only
+			3) factor => factor that are apply on privious backed off value to increse next requests hitting time
+			4) basedOnPriviousValue => if true then take privious backed value if false take first backed value
+			
+	
+	===> now after invoking api , if there is any problem gateway make multiple calls as per mention in our retry configuration 
+	eg. => heare gateway make total 3 extra calls 
+	ie. 1 call by ouerself and 3 calles as per configured above.
+
+
+-------------------------------------------------------------------------------------------
+			
+implementing Retry pattern in accounts =>
+we can implement fallback mechanism with retry mechanism when we use this in services ,
+when using in gateway we dont have option for fallback mechanism
+
+	1) to use this we have to mention this on method for which we want retry 
+		=> @Retry(name="methodName",fallbackMethod ="falbackMethodName")
+	
+	2) then we need to create fallback method
+		rulles to create fallback method
+			1. it should match method signature with method we are tryning to retry ie. return type ,input parameters should same
+			2. add 1 extra parameter in method input (Throwable throwable,...other parameters as per method body)
+			3. return any default logic you want
+
+	3) add retry propetties in configeration file (take it from resilience4j documentation)
+	
+resilience4j:
+  retry:
+    configs:
+      default:
+        maxAttempts: 3
+        waitDuration: 100
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+		
+		
+	
+import io.github.resilience4j.retry.annotation.Retry;
+
+	@GetMapping("/build-info")
+    @Retry(name="getBuildInfo",fallbackMethod = "getBuildInfoFallback")
+	
+    public ResponseEntity<String> getBuildInfo(){
+		logger.debug("getBuildInfo() method invoked");
+        return ResponseEntity.status(HttpStatus.OK).body(buildVersion);
+    }
+
+
+    public ResponseEntity<String> getBuildInfoFallback(Throwable throwable){
+		logger.debug("getBuildInfoFallBack() method invoked");
+        return ResponseEntity.status(HttpStatus.OK).body("0.9");
+    }
+
+
+==> in case of any problem now getBuildInfo() retries 3 times to get data , but after 3 fails it invoke fallback method and show default data ie. getBuildInfoFallback() method will invoke
+
+==> now problem is that retry will happning in all the cases what if we want to stop retry in case of any exception 
+==> we can mention the same in application properties 
+resilience4j:
+  retry:
+    configs:
+      default:
+        maxAttempts: 3
+        waitDuration: 100
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+		ignoreExceptions:
+          - java.lang.NullPointerException	// if this exception occers igonre retry dont do the retry process
+		  
+==> after this directly fallback method will invoke and no retry will happens
+
+-------------------------------------------------------
+
+===> if we want that for perticullar exception retry should work and for other exceptions retry should not work we can mention this by using properties
+
+resilience4j:
+  retry:
+    configs:
+      default:
+        maxAttempts: 3
+        waitDuration: 100
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+		retryExceptions:
+          - java.util.concurrent.TimeoutException
+		  
+	=> we dont need to mention ignoreExceptions here, resilience4j automatically done that for only given exception retry will happen for all other  exception retry will not happen.
+	
+	=> we can achive this in gateway server aslo by using .setException() or using .setStatuses() method 
+	
+.route(
+	p-> p.path("/ezbank/loans/**")
+			.filters(f -> f.rewritePath("/ezbank/loans/(?<segment>.*)","/${segment}")
+					.addResponseHeader("X-Response-Time", LocalDateTime.now().toString())
+					.retry(retryConfig -> retryConfig	
+							.setRetries(3)
+							.setMethods(HttpMethod.GET)
+							.setException(NullPointerException) // like this
+							.setStatuses(401)					// like this
+							.setBackoff(Duration.ofMillis(100),Duration.ofMillis(1000),2,true)))
+			.uri("lb://LOANS"))	
+--------------------------------------------------------------------------------------------------------
+
+
+
+===================================================================================================================================
+Rate Limiter Pattern => 
+	=> Using this pattern in microservices we can limit the rate of incoming requests to a service or api. It is used to prevent abuse, protects systems recources and ensure fair usage of the service
+	=> In microservice multiple services are depends on each other and make requets to comunicate. When we dont put restriction on requests it lead to performance degradation, resource exhaustisum, and potential denial-of-service (DoS) attacks. The rate limmiter pattern provides mechanisum to enforce limits on the rate of incomming requests
+	
+	=> it will prevent all of this problems when we use rate limmiter
+	=> when rate limiter activate it decline additional requests and show HTTP 429 [TO many requests status] 
+	=> we can define rate limitor on given sratergies
+		=> Per session
+		=> Ip addresses
+		=> user
+		=> tenent
+		=> servers
+	=> aslo we can do it on by benifitiory service
+		=> subscribed users
+		=> normal user
+
+
+Redis rate limiter in gateway => 
+	=> dependency => spring-boot-starter-data-redis-reactive
+	=> to use rate limmiter patter we need to implement KeyResolver interface
+	=> in spring we have Redis Rate Limmiter which is implementation of KeyResolver
+	=> in this system we have bucket of tocken filling automatically per second at defined account mention by us
+	=> it is token bases system we define that for each request how many tokens are used by user
+	=> and we define what is capacity of our bucket 
+	=> like we have 100 tokens/ second filling speed and our bucket capacity we mention as 1000 then in 10 second our bucket will full
+	=> we have 200 tokens / request rate to use an url for user then user can oonly make request per 2 seconds and when bucket complete 1000 tokens it fulls
+	
+	here,
+		1) redis-rate-limiter.replenishRate => rate at which token fill in bucket
+		2) redis-rate-limiter.burstCapacity => number of tokens the token bucket can hold. Setting this value to zero (0) blocks all requests.
+		3) redis-rate-limiter.requestedTokens => how many tokens cost per request default is 1
+	
+	=>For example, setting replenishRate=1, requestedTokens=60, and burstCapacity=60 results in a limit of 1 request/min. 
+
+
+implementing Redis Rate limiter pattern in gateway =>
+	=> add this dependency	=> spring-boot-starter-data-redis-reactive
+		=> 	<dependency>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+			</dependency>
+			
+	=> declare bean of KeyResolver and RedisRateLimiter in main gateway application		
+		=> @Bean
+			public RedisRateLimiter redisRateLimiter(){
+				return new RedisRateLimiter(1,1,1); //(defaultReplenishRate,defaultBurstCapacity,defaultRequestedTokens)
+			}
+			
+		=> @Bean
+			public KeyResolver userKeyResolver(){
+				return exchange ->
+						Mono.justOrEmpty(exchange.getRequest().
+								getHeaders()
+								.getFirst("user"))
+								.defaultIfEmpty("anonymous");
+			}
+			
+	=> configure it in RoutesLocator configration
+
+		.route(
+				p-> p.path("/ezbank/cards/**")
+						.filters(f -> f.rewritePath("/ezbank/cards/(?<segment>.*)","/${segment}")
+								.addResponseHeader("X-Response-Time", LocalDateTime.now().toString())
+								.requestRateLimiter(config -> config.setRateLimiter(redisRateLimiter())
+								.setKeyResolver(userKeyResolver()))
+						)
+						.uri("lb://CARDS"))
+	
+	// add filter requestRateLimiter()
+	// provide configuration of RedisRateLimiter inside requestRateLimiter , we are giving rateLimiter which we created 
+		=> .requestRateLimiter(config -> config.setRateLimiter(redisRateLimiter())
+	// add resolver key of limiter by using .setKeyResolver , we are going to give key by usinf keyresolver which we creates
+		=>	.setKeyResolver(userKeyResolver()))
+
+	// here, we have bucket name as "user" and configratin as 1 token fill per second in 1 capacity bucket with 1 token/ request config 
+	
+	=> we have to start redis service to use it in our system
+	=> we use it by using docker 
+		=> docker run -p 6379:6379 --name ezredis -d redis	=> run this command 
+	
+	=> now give connection details of redis in gateway properties
+	
+spring:
+  data:
+    redis:
+      connect-timeout: 2s
+      host: localhost
+      port: 6379
+      timeout: 1s 	
+
+	=> done now run server and test
+
+	=> to test this download apache benchmark server and execute commans 
+		=> https://httpd.apache.org/ visit this for more
+
+
+implementing Rate Limiter pattern in accounts =>
+	=> this is simple approch in this we dont need to add extra dependency and we dont need redis container
+	add properties =>
+	
+resilience4j:
+  ratelimiter:
+    configs:
+      default:
+        timeoutDuration: 1000 //what is max time my thread weight for new refresh period will arive with new quata
+        limitRefreshPeriod: 5000 //	quata refresh in evry 5 seconds
+        limitForPeriod: 1	// for evry 5 seconds 1 request is allwed,in real word porjects its in millions 
+		
+	=> add anotation on methods 
+		@RateLimiter(name = "getJavaVersion")	// methodname
+		@GetMapping("/java-version")
+		public ResponseEntity<String> getJavaVersion(){
+			return ResponseEntity.status(HttpStatus.OK).body(environment.getProperty("JAVA_HOME"));
+		}
+
+	=> run application and invoke uri for that method
+		=>  localhost:8072/ezbank/accounts/api/java-version
+	=> refresh continuesly and you will get 
+			{
+				"apiPath": "uri=/api/java-version",
+				"errorCode": "INTERNAL_SERVER_ERROR",
+				"errorMessage": "RateLimiter 'getJavaVersion' does not permit further calls",
+				"errorTime": "2024-03-05T01:34:46.0503265"
+			}
+	
+	=> we can defin fallback mechanism for this pattern  just introduce fallbackMethos parameter
+	
+	@RateLimiter(name = "getJavaVersion",fallbackMethod = "getJavaVersionFallback")
+    @GetMapping("/java-version")
+    public ResponseEntity<String> getJavaVersion(){
+        return ResponseEntity.status(HttpStatus.OK).body(environment.getProperty("JAVA_HOME"));
+    }
+
+    public ResponseEntity<String> getJavaVersionFallback(Throwable throwable){
+        return ResponseEntity.status(HttpStatus.OK).body("java 17 LTS");
+    }	
+	
+===================================================================================================================================
+BulckHead pattern =>
+	=> using this we can improve the resilience and isolation services within the system. it stops services affecting other services
+	=> it ensure that failuer or heavy load in one service dose not affect other services.
+	=> with help of this pattern we can assign perticular amount of resorces to service or to specific api, so that excesive use of rescorces we can avoid
+	
+	=> in service we can use this we cant do it in gateway
+	
+
+
+===================================================================================================================================
+Aspect order of resiliency patterns =>
+	bulckhead => timelimiter => RateLimiter => circuitbreaker => Retry 
+	
+	this is default order of resiliency pattern 
+	means Retry applay at last and bulkhead applay at first
+	
+	if we want to chnage this order we have properties 
+	=> 
+
+resilience4j:
+  circuitbreaker:
+    circuitBreakerAspectOrder: 1	// low value means low proprity so it execute after retry 
+  retry:
+    retryAspectOrder: 2				// higher value means high priority so it execure before circuitBreaker now

@@ -1,0 +1,36 @@
+
+How to use OpenFeign =>
+
+1) add dependency
+
+	<dependency>
+		<groupId>org.springframework.cloud</groupId>
+		<artifactId>spring-cloud-starter-openfeign</artifactId>
+	</dependency>
+
+2) Eneable it by mentioning an anotation on main class
+	=> @EnableFeignClients
+	
+
+
+============================================================================
+Now to connect with other ms we can create the interface and mark it with @FeignClient to call services of other ms
+
+Note =>
+1. name of microservices should correct
+2. path should be correct and full
+3. method signeture should same as mentioned in the consuming microservice
+
+
+
+@FeignClient("cards")		// microservices name in config server
+public interface CardsFeignClient {
+
+    @GetMapping(value = "/api/fetch",consumes = "application/json")		// we need to give full path 
+    public ResponseEntity<CardsDto> fetchCardDetails(@RequestParam String mobileNumber);	// method signeture should be match
+
+}	
+
+
+By using this we can fetch the data from other services ,
+In controller add method to fetch data , and you are all done , we can fetch data from other microservice.
